@@ -1,0 +1,35 @@
+{
+  "name": "openclaw-pixel-ui",
+  "version": "1.0.0",
+  "description": "Web-based UI for visualizing OpenClaw agents with pixel art characters",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:client": "vite --config vite.config.ts",
+    "build": "npm run build:server && npm run build:client",
+    "build:server": "tsc --project tsconfig.server.json",
+    "build:client": "vite build",
+    "start": "node dist/server/index.js",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "chokidar": "^3.5.3"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@types/ws": "^8.5.9",
+    "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^8.2.2",
+    "tsx": "^4.6.2",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8"
+  }
+}
