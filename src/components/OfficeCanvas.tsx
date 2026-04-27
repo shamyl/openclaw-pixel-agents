@@ -190,66 +190,55 @@ export function OfficeCanvas({
       ctx.arc(x + AGENT_SIZE/2 + 2, y - AGENT_SIZE/2 - 2, 4, 0, Math.PI * 2);
       ctx.fill();
       
-      // Activity indicator (bouncing dot above head when active)
+      // Activity indicator
+      let statusLabel = '';
       if (agent.status === 'active') {
         const bounce = Math.sin(Date.now() / 150) * 3;
         ctx.fillStyle = AGENT_COLORS.active;
         ctx.beginPath();
-        ctx.arc(x, y - AGENT_SIZE/2 - 12 + bounce, 3, 0, Math.PI * 2);
+        ctx.arc(x, y - AGENT_SIZE/2 - 14 + bounce, 3, 0, Math.PI * 2);
         ctx.fill();
-        
-        // Add "Working" text above
-        ctx.fillStyle = AGENT_COLORS.active;
-        ctx.font = 'bold 8px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('WORKING', x, y - AGENT_SIZE/2 - 18);
+        statusLabel = 'WORKING';
       } else if (agent.status === 'waiting') {
-        // Show "Idle" text
-        ctx.fillStyle = AGENT_COLORS.waiting;
-        ctx.font = 'bold 8px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('IDLE', x, y - AGENT_SIZE/2 - 12);
+        statusLabel = 'IDLE';
       }
       
-      // Status text below character
-      const statusText = agent.status.toUpperCase();
-      ctx.font = 'bold 7px monospace';
-      const textWidth = ctx.measureText(statusText).width;
+      // Draw status label above character
+      if (statusLabel) {
+        ctx.font = 'bold 8px monospace';
+        ctx.textAlign = 'center';
+        const labelWidth = ctx.measureText(statusLabel).width;
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.fillRect(x - labelWidth/2 - 2, y - AGENT_SIZE/2 - 26, labelWidth + 4, 12);
+        ctx.fillStyle = agent.status === 'active' ? AGENT_COLORS.active : AGENT_COLORS.waiting;
+        ctx.fillText(statusLabel, x, y - AGENT_SIZE/2 - 18);
+      }
       
-      // Status text background
-      ctx.fillStyle = 'rgba(0,0,0,0.8)';
-      ctx.fillRect(x - textWidth/2 - 3, y + AGENT_SIZE/2 + 2, textWidth + 6, 10);
+      // Current tool indicator (above status label)
+      if (agent.currentTool) {
+        const toolText = agent.currentTool.slice(0, 12);
+        ctx.font = '7px monospace';
+        const toolWidth = ctx.measureText(toolText).width;
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.fillRect(x - toolWidth/2 - 2, y - AGENT_SIZE/2 - 40, toolWidth + 4, 12);
+        ctx.fillStyle = '#ffd93d';
+        ctx.fillText(toolText, x, y - AGENT_SIZE/2 - 32);
+      }
       
-      // Status text
-      ctx.fillStyle = statusColor;
-      ctx.textAlign = 'center';
-      ctx.fillText(statusText, x, y + AGENT_SIZE/2 + 9);
-      
-      // Label background (for readability)
-      const label = agent.context || agent.label?.slice(0, 12) || agent.id.slice(0, 8);
+      // Agent name/ID label (below character)
+      const nameLabel = agent.label || agent.id.slice(0, 8);
       ctx.font = 'bold 9px monospace';
-      const labelWidth = ctx.measureText(label).width;
+      const nameWidth = ctx.measureText(nameLabel).width;
+      const nameY = y + AGENT_SIZE/2 + 18;
       
-      // Draw label below agent with background
-      const labelY = y + AGENT_SIZE/2 + 22;
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(x - labelWidth/2 - 4, labelY - 8, labelWidth + 8, 14);
+      // Name background
+      ctx.fillStyle = 'rgba(0,0,0,0.8)';
+      ctx.fillRect(x - nameWidth/2 - 4, nameY - 9, nameWidth + 8, 16);
       
+      // Name text
       ctx.fillStyle = isSelected ? '#e94560' : '#fff';
       ctx.textAlign = 'center';
-      ctx.fillText(label, x, labelY + 2);
-      
-      // Current tool indicator (small text above)
-      if (agent.currentTool) {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        const toolText = agent.currentTool.slice(0, 15);
-        const toolWidth = ctx.measureText(toolText).width;
-        ctx.fillRect(x - toolWidth/2 - 2, y - AGENT_SIZE/2 - 32, toolWidth + 4, 12);
-        
-        ctx.fillStyle = '#ffd93d';
-        ctx.font = '8px monospace';
-        ctx.fillText(toolText, x, y - AGENT_SIZE/2 - 24);
-      }
+      ctx.fillText(nameLabel, x, nameY + 3);
     });
 
     animationRef.current = requestAnimationFrame(draw);

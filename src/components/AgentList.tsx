@@ -13,57 +13,34 @@ const statusColors = {
   idle: '#6c757d',
 };
 
-// Platform icons using SVG-like paths or emojis
-const iconMap: Record<string, string> = {
-  'discord': 'D',
-  'whatsapp': 'W',
-  'imessage': 'M',
-  'slack': 'S',
-  'telegram': 'T',
-  'signal': 'G',
-  'default': 'A',
-};
-
-// Icon colors
-const iconColors: Record<string, string> = {
-  'discord': '#7289da',
-  'whatsapp': '#25d366',
-  'imessage': '#34c759',
-  'slack': '#4a154b',
-  'telegram': '#0088cc',
-  'signal': '#3b45a3',
-  'default': '#95a5a6',
+// Platform letter badges with colors
+const platformConfig: Record<string, { letter: string; bg: string }> = {
+  'discord': { letter: 'D', bg: '#5865F2' },
+  'whatsapp': { letter: 'W', bg: '#25D366' },
+  'imessage': { letter: 'M', bg: '#34C759' },
+  'slack': { letter: 'S', bg: '#4A154B' },
+  'telegram': { letter: 'T', bg: '#0088CC' },
+  'signal': { letter: 'G', bg: '#3B45A3' },
+  'default': { letter: 'A', bg: '#95A5A6' },
 };
 
 function formatTime(timestamp: number): string {
   const date = new Date(timestamp);
-  return date.toLocaleTimeString('en-US', { 
-    hour: '2-digit', 
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: false 
+    hour12: false
   });
 }
 
 export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentListProps) {
   const selectedAgentData = selectedAgent ? agents.find(a => a.id === selectedAgent) : null;
 
-  // Sort agents by last activity (newest first)
-  const sortedAgents = [...agents].sort((a, b) => {
-    // Get last activity timestamp
-    const aTime = a.recentActivities && a.recentActivities.length > 0 
-      ? a.recentActivities[0].timestamp 
-      : 0;
-    const bTime = b.recentActivities && b.recentActivities.length > 0 
-      ? b.recentActivities[0].timestamp 
-      : 0;
-    return bTime - aTime;
-  });
-
   return (
     <div className="agent-list">
       <h3>Agents ({agents.length})</h3>
-      
+
       {/* Status Legend */}
       <div className="status-legend">
         <div className="legend-title">Status:</div>
@@ -80,62 +57,70 @@ export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentLis
           <span>Idle</span>
         </div>
       </div>
-      
+
       <div className="agent-list-content">
-        {sortedAgents.length === 0 ? (
+        {agents.length === 0 ? (
           <div className="no-agents">No active agents</div>
         ) : (
-          sortedAgents.map((agent) => (
-            <div
-              key={agent.id}
-              className={`agent-item ${selectedAgent === agent.id ? 'selected' : ''}`}
-              onClick={() => onSelect(agent.id)}
-            >
-              <div className="agent-header">
-                <span 
-                  className="agent-icon"
-                  style={{ 
-                    backgroundColor: iconColors[agent.icon || 'default'],
-                    color: '#fff',
-                    fontWeight: 'bold',
-                    fontSize: '10px',
-                    padding: '2px 5px',
-                    borderRadius: '3px',
-                    marginRight: '6px',
-                  }}
-                >
-                  {iconMap[agent.icon || 'default']}
-                </span>
-                <span className="agent-name" title={agent.id}>
-                  {agent.label || agent.id.slice(0, 16)}
-                </span>
-                <span
-                  className="agent-status"
-                  style={{ color: statusColors[agent.status] }}
-                >
-                  ●
-                </span>
-              </div>
-              <div className="agent-details">
-                {agent.currentTool && (
-                  <span className="agent-tool">{agent.currentTool}</span>
+          agents.map((agent) => {
+            const platform = platformConfig[agent.icon || 'default'];
+            return (
+              <div
+                key={agent.id}
+                className={`agent-item ${selectedAgent === agent.id ? 'selected' : ''}`}
+                onClick={() => onSelect(agent.id)}
+              >
+                <div className="agent-header">
+                  <span
+                    className="agent-icon"
+                    style={{
+                      backgroundColor: platform.bg,
+                      color: '#fff',
+                      fontWeight: 'bold',
+                      fontSize: '10px',
+                      width: '20px',
+                      height: '20px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '4px',
+                      marginRight: '8px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {platform.letter}
+                  </span>
+                  <span className="agent-name" title={agent.id}>
+                    {agent.label || agent.id.slice(0, 16)}
+                  </span>
+                  <span
+                    className="agent-status"
+                    style={{ color: statusColors[agent.status] }}
+                  >
+                    ●
+                  </span>
+                </div>
+                <div className="agent-details">
+                  {agent.currentTool && (
+                    <span className="agent-tool">{agent.currentTool}</span>
+                  )}
+                </div>
+                {selectedAgent === agent.id && (
+                  <button
+                    className="close-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClose(agent.id);
+                    }}
+                  >
+                    Close
+                  </button>
                 )}
               </div>
-              {selectedAgent === agent.id && (
-                <button
-                  className="close-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClose(agent.id);
-                  }}
-                >
-                  Close
-                </button>
-              )}
-            </div>
-          ))
+            );
+          })
         )}
-        
+
         {/* Activity Log for Selected Agent */}
         {selectedAgentData && (
           <div className="activity-log">

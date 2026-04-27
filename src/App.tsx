@@ -120,6 +120,7 @@ function App() {
           context: msg.context as string | undefined,
           icon: msg.icon as string | undefined,
           status: 'idle',
+          lastActivity: Date.now(), // Set to now when agent is created
           x: 0,
           y: 0,
         };
@@ -133,7 +134,7 @@ function App() {
       case 'agentStatus': {
         setAgents((prev) =>
           prev.map((a) =>
-            a.id === msg.id ? { ...a, status: msg.status as Agent['status'] } : a
+            a.id === msg.id ? { ...a, status: msg.status as Agent['status'], lastActivity: Date.now() } : a
           )
         );
         break;
@@ -142,7 +143,7 @@ function App() {
         setAgents((prev) =>
           prev.map((a) =>
             a.id === msg.id
-              ? { ...a, status: 'active', currentTool: msg.toolName as string }
+              ? { ...a, status: 'active', currentTool: msg.toolName as string, lastActivity: Date.now() }
               : a
           )
         );
