@@ -25,6 +25,7 @@ interface AgentState {
   isWatching: boolean;
   channel: string;
   context: string;
+  icon: string;
   recentActivities: ActivityEvent[];
 }
 
@@ -272,7 +273,7 @@ function stopWatchingTrajectoryFile(agentId: string): void {
 }
 
 // Parse session key
-function parseSessionKey(sessionKey: string): { label: string; channel: string; context: string } {
+function parseSessionKey(sessionKey: string): { label: string; channel: string; context: string; icon: string } {
   const parts = sessionKey.split(':');
   
   if (parts.length >= 4 && parts[0] === 'agent') {
@@ -280,35 +281,30 @@ function parseSessionKey(sessionKey: string): { label: string; channel: string; 
     const channelType = parts[2];
     const channelId = parts[3];
     
-    const channelNames: Record<string, string> = {
-      'discord': 'Discord',
-      'whatsapp': 'WhatsApp',
-      'imessage': 'iMessage',
-      'slack': 'Slack',
-      'telegram': 'Telegram',
-      'signal': 'Signal',
+    // Icons for different platforms
+    const channelIcons: Record<string, string> = {
+      'discord': 'discord',
+      'whatsapp': 'whatsapp',
+      'imessage': 'imessage',
+      'slack': 'slack',
+      'telegram': 'telegram',
+      'signal': 'signal',
     };
     
-    const channelName = channelNames[channelType] || channelType;
+    const icon = channelIcons[channelType] || 'default';
     
-    const knownChannels: Record<string, string> = {
-      '1498224182117269586': '#general',
-      '1498283683419787434': '#ui-for-ashbot', 
-      '1498280506478039150': '#dev',
-      '1498282151181811823': '#testing',
-      '+923333276571': 'Personal',
-    };
-    
-    const channelLabel = knownChannels[channelId] || channelId.slice(0, 8);
+    // Simple label format: agentName:channelType
+    const label = `${agentName}:${channelType}`;
     
     return {
-      label: `${agentName} • ${channelName} ${channelLabel}`,
-      channel: channelName,
-      context: channelLabel
+      label,
+      channel: channelType,
+      context: channelId.slice(0, 8),
+      icon
     };
   }
   
-  return { label: sessionKey, channel: 'unknown', context: '' };
+  return { label: sessionKey, channel: 'unknown', context: '', icon: 'default' };
 }
 
 // Read sessions
@@ -320,6 +316,7 @@ async function readOpenClawSessions(): Promise<Array<{
   trajectoryFile?: string;
   channel: string;
   context: string;
+  icon: string;
 }>> {
   const sessions: Array<{
     sessionKey: string;
@@ -329,6 +326,7 @@ async function readOpenClawSessions(): Promise<Array<{
     trajectoryFile?: string;
     channel: string;
     context: string;
+    icon: string;
   }> = [];
 
   try {
@@ -390,7 +388,8 @@ async function readOpenClawSessions(): Promise<Array<{
             isSubagent: agentId !== 'main',
             trajectoryFile: fs.existsSync(trajectoryPath) ? trajectoryPath : undefined,
             channel: sessionInfo.channel,
-            context: sessionInfo.context
+            context: sessionInfo.context,
+            icon: sessionInfo.icon
           });
         } catch (e) {
           // Skip malformed files
@@ -427,6 +426,7 @@ async function pollOpenClawAgents(): Promise<void> {
           isWatching: false,
           channel: session.channel,
           context: session.context,
+          icon: session.icon,
           recentActivities: [],
         };
         
@@ -448,6 +448,7 @@ async function pollOpenClawAgents(): Promise<void> {
           folderName: session.agentId,
           channel: session.channel,
           context: session.context,
+          icon: session.icon,
           isSubagent: session.isSubagent,
         });
         console.log(`[Bridge] New agent: ${session.label}`);
@@ -472,15 +473,16 @@ async function pollOpenClawAgents(): Promise<void> {
         const demoAgent: AgentState = {
           id: demoKey,
           sessionKey: demoKey,
-          label: 'Ash (Main)',
+          label: 'main:demo',
           agentId: 'main',
           status: 'active',
           lastActivity: Date.now(),
           isSubagent: false,
           filePosition: 0,
           isWatching: false,
-          channel: 'Demo',
-          context: 'Local',
+          channel: 'demo',
+          context: 'local',
+          icon: 'default',
           recentActivities: [
             { type: 'status', description: 'Demo agent initialized', timestamp: Date.now() }
           ],
@@ -489,10 +491,11 @@ async function pollOpenClawAgents(): Promise<void> {
         broadcast({
           type: 'agentCreated',
           id: demoKey,
-          label: 'Ash (Main)',
+          label: 'main:demo',
           folderName: 'main',
-          channel: 'Demo',
-          context: 'Local',
+          channel: 'demo',
+          context: 'local',
+          icon: 'default',
           isSubagent: false,
         });
         console.log(`[Bridge] Demo agent added`);

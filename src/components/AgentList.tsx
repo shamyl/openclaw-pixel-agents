@@ -13,6 +13,17 @@ const statusColors = {
   idle: '#6c757d',
 };
 
+// Platform icons
+const iconMap: Record<string, string> = {
+  'discord': '💬',
+  'whatsapp': '📱',
+  'imessage': '💬',
+  'slack': '💬',
+  'telegram': '✈️',
+  'signal': '🔒',
+  'default': '🤖',
+};
+
 function formatTime(timestamp: number): string {
   const date = new Date(timestamp);
   return date.toLocaleTimeString('en-US', { 
@@ -58,8 +69,8 @@ export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentLis
               onClick={() => onSelect(agent.id)}
             >
               <div className="agent-header">
-                <span className="agent-type">
-                  {agent.isSubagent ? '[Sub]' : '[Main]'}
+                <span className="agent-icon">
+                  {iconMap[agent.icon || 'default']}
                 </span>
                 <span className="agent-name" title={agent.id}>
                   {agent.label || agent.id.slice(0, 16)}
@@ -72,12 +83,6 @@ export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentLis
                 </span>
               </div>
               <div className="agent-details">
-                {agent.channel && (
-                  <span className="agent-channel">{agent.channel}</span>
-                )}
-                {agent.context && (
-                  <span className="agent-context">{agent.context}</span>
-                )}
                 {agent.currentTool && (
                   <span className="agent-tool">{agent.currentTool}</span>
                 )}

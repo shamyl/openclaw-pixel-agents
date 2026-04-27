@@ -14,6 +14,7 @@ export interface Agent {
   currentTool?: string;
   channel?: string;
   context?: string;
+  icon?: string;
   recentActivities?: ActivityEvent[];
   x: number;
   y: number;

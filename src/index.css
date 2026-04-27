@@ -200,6 +200,11 @@ body {
   border-radius: 4px;
 }
 
+.agent-icon {
+  font-size: 14px;
+  margin-right: 4px;
+}
+
 .agent-name {
   flex: 1;
   font-weight: 500;
