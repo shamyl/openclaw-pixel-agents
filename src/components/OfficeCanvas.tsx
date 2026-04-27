@@ -10,14 +10,33 @@ interface OfficeCanvasProps {
 
 const TILE_SIZE = 32;
 const AGENT_SIZE = 20;
+const SPRITE_SIZE = 16; // 16x16 sprites
 
 // Agent colors by status
 const AGENT_COLORS = {
   active: '#00ff88',
-  waiting: '#ffd93d', 
+  waiting: '#ffd93d',
   idle: '#6c757d',
   selected: '#e94560',
 };
+
+// Sprite configurations - each agent gets a different sprite
+const SPRITE_SHEETS = [
+  '/sprites/WorkerSheetBrownPurple.png',
+  '/sprites/WorkerSheetBrownWhite.png',
+  '/sprites/WorkerSheetYellowPurple.png',
+  '/sprites/WorkerSheetYellowWhite.png',
+];
+
+// Map agent ID to sprite index
+function getSpriteIndex(agentId: string): number {
+  let hash = 0;
+  for (let i = 0; i < agentId.length; i++) {
+    hash = ((hash << 5) - hash) + agentId.charCodeAt(i);
+    hash = hash & hash;
+  }
+  return Math.abs(hash) % SPRITE_SHEETS.length;
+}
 
 export function OfficeCanvas({
   layout,
@@ -28,9 +47,30 @@ export function OfficeCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
   const agentAnimations = useRef<Map<string, AgentAnimation>>(new Map());
+  const spriteImages = useRef<Map<string, HTMLImageElement>>(new Map());
+  const spritesLoaded = useRef<boolean>(false);
 
   const canvasWidth = layout.cols * TILE_SIZE;
   const canvasHeight = layout.rows * TILE_SIZE;
+
+  // Load sprite images
+  useEffect(() => {
+    const loadPromises = SPRITE_SHEETS.map((src) => {
+      return new Promise<void>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          spriteImages.current.set(src, img);
+          resolve();
+        };
+        img.onerror = () => resolve(); // Continue even if image fails
+        img.src = src;
+      });
+    });
+
+    Promise.all(loadPromises).then(() => {
+      spritesLoaded.current = true;
+    });
+  }, []);
 
   // Initialize agent positions
   useEffect(() => {
@@ -39,10 +79,10 @@ export function OfficeCanvas({
         const desk = layout.desks[index % layout.desks.length];
         const x = desk.col * TILE_SIZE + TILE_SIZE / 2;
         const y = desk.row * TILE_SIZE + TILE_SIZE / 2 + 20;
-        
+
         agent.x = x;
         agent.y = y;
-        
+
         agentAnimations.current.set(agent.id, {
           frame: 0,
           state: agent.status === 'active' ? 'typing' : 'idle',
@@ -68,11 +108,11 @@ export function OfficeCanvas({
       for (let col = 0; col < layout.cols; col++) {
         const x = col * TILE_SIZE;
         const y = row * TILE_SIZE;
-        
+
         // Wood floor pattern
         ctx.fillStyle = (row + col) % 2 === 0 ? '#3d2914' : '#4a3420';
         ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-        
+
         // Tile border
         ctx.strokeStyle = '#2d1f0e';
         ctx.lineWidth = 0.5;
@@ -85,7 +125,7 @@ export function OfficeCanvas({
     for (let col = 0; col < layout.cols; col++) {
       // Top wall
       ctx.fillRect(col * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE);
-      // Bottom wall  
+      // Bottom wall
       ctx.fillRect(col * TILE_SIZE, (layout.rows - 1) * TILE_SIZE, TILE_SIZE, TILE_SIZE);
     }
     for (let row = 1; row < layout.rows - 1; row++) {
@@ -122,21 +162,21 @@ export function OfficeCanvas({
     layout.desks.forEach((desk, index) => {
       const x = desk.col * TILE_SIZE;
       const y = desk.row * TILE_SIZE;
-      
+
       // Desk shadow
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
       ctx.fillRect(x + 4, y + TILE_SIZE - 8, TILE_SIZE - 8, 4);
-      
+
       // Desk
       ctx.fillStyle = '#8b6914';
       ctx.fillRect(x + 4, y + 4, TILE_SIZE - 8, TILE_SIZE - 8);
-      
+
       // Computer monitor
       ctx.fillStyle = '#2c3e50';
       ctx.fillRect(x + 10, y + 6, TILE_SIZE - 20, 8);
       ctx.fillStyle = '#3498db';
       ctx.fillRect(x + 12, y + 7, TILE_SIZE - 24, 6);
-      
+
       // Keyboard
       ctx.fillStyle = '#7f8c8d';
       ctx.fillRect(x + 10, y + 18, TILE_SIZE - 20, 4);
@@ -155,26 +195,46 @@ export function OfficeCanvas({
       ctx.ellipse(x, y + AGENT_SIZE/2 + 4, AGENT_SIZE/2, AGENT_SIZE/4, 0, 0, Math.PI * 2);
       ctx.fill();
       
-      // Selection glow
-      if (isSelected) {
-        ctx.shadowColor = AGENT_COLORS.selected;
-        ctx.shadowBlur = 15;
+      // Draw sprite if loaded, otherwise fallback to colored rectangle
+      const spriteIndex = getSpriteIndex(agent.id);
+      const spriteSrc = SPRITE_SHEETS[spriteIndex];
+      const spriteImg = spriteImages.current.get(spriteSrc);
+      
+      if (spriteImg && spritesLoaded.current) {
+        // Calculate animation frame (0-3 for walking/typing animation)
+        const frameIndex = Math.floor(Date.now() / 250) % 4;
+        // Each sprite is 16x16, sheets have 4 columns (horizontal layout)
+        const sx = frameIndex * SPRITE_SIZE;
+        const sy = 0; // First row (standing/walking)
+        
+        // Scale up the 16x16 sprite to fit
+        ctx.drawImage(
+          spriteImg,
+          sx, sy, SPRITE_SIZE, SPRITE_SIZE,
+          x - AGENT_SIZE/2 - 4, y - AGENT_SIZE/2 - 8, AGENT_SIZE + 8, AGENT_SIZE + 8
+        );
+      } else {
+        // Fallback: Draw pixel character
+        if (isSelected) {
+          ctx.shadowColor = AGENT_COLORS.selected;
+          ctx.shadowBlur = 15;
+        }
+        
+        // Body (pixel style rectangle)
+        ctx.fillStyle = agent.isSubagent ? '#9b59b6' : '#3498db';
+        ctx.fillRect(x - AGENT_SIZE/2, y - AGENT_SIZE/2, AGENT_SIZE, AGENT_SIZE);
+        
+        // Head
+        ctx.fillStyle = '#f39c12';
+        ctx.fillRect(x - AGENT_SIZE/2 + 2, y - AGENT_SIZE/2 - 6, AGENT_SIZE - 4, 6);
+        
+        // Eyes
+        ctx.fillStyle = '#000';
+        ctx.fillRect(x - 4, y - AGENT_SIZE/2 - 4, 2, 2);
+        ctx.fillRect(x + 2, y - AGENT_SIZE/2 - 4, 2, 2);
+        
+        ctx.shadowBlur = 0;
       }
-      
-      // Body (pixel style rectangle)
-      ctx.fillStyle = agent.isSubagent ? '#9b59b6' : '#3498db';
-      ctx.fillRect(x - AGENT_SIZE/2, y - AGENT_SIZE/2, AGENT_SIZE, AGENT_SIZE);
-      
-      // Head
-      ctx.fillStyle = '#f39c12';
-      ctx.fillRect(x - AGENT_SIZE/2 + 2, y - AGENT_SIZE/2 - 6, AGENT_SIZE - 4, 6);
-      
-      // Eyes
-      ctx.fillStyle = '#000';
-      ctx.fillRect(x - 4, y - AGENT_SIZE/2 - 4, 2, 2);
-      ctx.fillRect(x + 2, y - AGENT_SIZE/2 - 4, 2, 2);
-      
-      ctx.shadowBlur = 0;
       
       // Status indicator ring (white border)
       const statusColor = AGENT_COLORS[agent.status];
@@ -189,7 +249,7 @@ export function OfficeCanvas({
       ctx.beginPath();
       ctx.arc(x + AGENT_SIZE/2 + 2, y - AGENT_SIZE/2 - 2, 4, 0, Math.PI * 2);
       ctx.fill();
-      
+
       // Activity indicator
       let statusLabel = '';
       if (agent.status === 'active') {
@@ -202,7 +262,7 @@ export function OfficeCanvas({
       } else if (agent.status === 'waiting') {
         statusLabel = 'IDLE';
       }
-      
+
       // Draw status label above character
       if (statusLabel) {
         ctx.font = 'bold 8px monospace';
@@ -213,7 +273,7 @@ export function OfficeCanvas({
         ctx.fillStyle = agent.status === 'active' ? AGENT_COLORS.active : AGENT_COLORS.waiting;
         ctx.fillText(statusLabel, x, y - AGENT_SIZE/2 - 18);
       }
-      
+
       // Current tool indicator (above status label)
       if (agent.currentTool) {
         const toolText = agent.currentTool.slice(0, 12);
@@ -224,17 +284,17 @@ export function OfficeCanvas({
         ctx.fillStyle = '#ffd93d';
         ctx.fillText(toolText, x, y - AGENT_SIZE/2 - 32);
       }
-      
+
       // Agent name/ID label (below character)
       const nameLabel = agent.label || agent.id.slice(0, 8);
       ctx.font = 'bold 9px monospace';
       const nameWidth = ctx.measureText(nameLabel).width;
       const nameY = y + AGENT_SIZE/2 + 18;
-      
+
       // Name background
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
       ctx.fillRect(x - nameWidth/2 - 4, nameY - 9, nameWidth + 8, 16);
-      
+
       // Name text
       ctx.fillStyle = isSelected ? '#e94560' : '#fff';
       ctx.textAlign = 'center';
