@@ -25,11 +25,12 @@ interface AgentState {
   isWatching: boolean;
   channel: string;
   context: string;
+  recentActivities: ActivityEvent[];
 }
 
-interface ToolEvent {
-  toolName: string;
-  status: 'start' | 'done';
+interface ActivityEvent {
+  type: 'tool' | 'status' | 'message';
+  description: string;
   timestamp: number;
 }
 
@@ -58,7 +59,28 @@ function broadcast(message: Record<string, unknown>): void {
   }
 }
 
-// Parse trajectory file for tool events
+// Add activity to agent's log
+function addActivity(agent: AgentState, type: ActivityEvent['type'], description: string): void {
+  const activity: ActivityEvent = {
+    type,
+    description,
+    timestamp: Date.now(),
+  };
+  agent.recentActivities.unshift(activity);
+  // Keep only last 10 activities
+  if (agent.recentActivities.length > 10) {
+    agent.recentActivities.pop();
+  }
+  
+  // Broadcast activity update
+  broadcast({
+    type: 'agentActivity',
+    id: agent.id,
+    activities: agent.recentActivities,
+  });
+}
+
+// Parse trajectory file for events
 async function parseTrajectoryFile(filePath: string, agent: AgentState): Promise<void> {
   try {
     const stats = fs.statSync(filePath);
@@ -81,20 +103,74 @@ async function parseTrajectoryFile(filePath: string, agent: AgentState): Promise
       try {
         const record = JSON.parse(line);
         
-        // Look for tool calls in trajectory data
-        // OpenClaw trajectory format has tool info nested in data
-        if (record.type === 'tool_call' || 
-            (record.data && record.data.tool) ||
-            (record.source === 'tool' && record.data)) {
+        // Look for different event types in OpenClaw trajectory
+        if (record.type === 'session.started') {
+          agent.status = 'active';
+          agent.lastActivity = Date.now();
+          addActivity(agent, 'status', 'Session started');
           
-          const toolName = record.data?.tool || record.tool || 'Unknown';
+          broadcast({
+            type: 'agentStatus',
+            id: agent.id,
+            status: 'active',
+          });
+        }
+        else if (record.type === 'session.ended') {
+          agent.status = 'waiting';
+          agent.currentTool = undefined;
+          agent.toolStatus = undefined;
+          addActivity(agent, 'status', `Session ended (${record.data?.status || 'unknown'})`);
+          
+          broadcast({
+            type: 'agentStatus',
+            id: agent.id,
+            status: 'waiting',
+          });
+        }
+        else if (record.type === 'prompt.submitted') {
+          agent.status = 'active';
+          agent.currentTool = 'Thinking';
+          agent.toolStatus = 'Processing prompt...';
+          agent.lastActivity = Date.now();
+          addActivity(agent, 'message', 'Received message');
+          
+          broadcast({
+            type: 'agentToolStart',
+            id: agent.id,
+            toolId: 'thinking',
+            status: 'Processing...',
+            toolName: 'LLM',
+          });
+        }
+        else if (record.type === 'model.completed') {
+          agent.currentTool = undefined;
+          agent.toolStatus = undefined;
+          agent.status = 'waiting';
+          addActivity(agent, 'message', 'Response ready');
+          
+          broadcast({
+            type: 'agentToolDone',
+            id: agent.id,
+            toolId: 'thinking',
+          });
+          broadcast({
+            type: 'agentStatus',
+            id: agent.id,
+            status: 'waiting',
+          });
+        }
+        // Check for tool calls in various formats
+        else if (record.type?.includes('tool') || record.data?.tool) {
+          const toolName = record.data?.tool || record.tool || record.type;
           const toolInput = record.data?.input || record.input || {};
           
-          // Update agent with tool activity
           agent.currentTool = toolName;
           agent.toolStatus = formatToolStatus(toolName, toolInput);
           agent.status = 'active';
           agent.lastActivity = Date.now();
+          
+          const description = formatToolStatus(toolName, toolInput);
+          addActivity(agent, 'tool', description);
 
           broadcast({
             type: 'agentToolStart',
@@ -136,43 +212,32 @@ async function parseTrajectoryFile(filePath: string, agent: AgentState): Promise
   }
 }
 
-// Format tool status similar to Pixel Agents
+// Format tool status
 function formatToolStatus(toolName: string, input: Record<string, unknown>): string {
   const base = (p: unknown) => (typeof p === 'string' ? path.basename(p) : '');
   
-  switch (toolName) {
+  switch (toolName.toLowerCase()) {
     case 'read':
-    case 'Read':
       return `Reading ${base(input.file_path || input.path)}`;
     case 'edit':
-    case 'Edit':
       return `Editing ${base(input.file_path || input.path)}`;
     case 'write':
-    case 'Write':
       return `Writing ${base(input.file_path || input.path)}`;
     case 'bash':
-    case 'Bash':
-    case 'exec':
-    case 'Exec': {
+    case 'exec': {
       const cmd = (input.command as string) || '';
       return cmd.length > 40 ? `Running: ${cmd.slice(0, 40)}...` : `Running: ${cmd}`;
     }
     case 'glob':
-    case 'Glob':
       return 'Searching files';
     case 'grep':
-    case 'Grep':
       return 'Searching code';
     case 'web_fetch':
-    case 'WebFetch':
       return 'Fetching web content';
     case 'web_search':
-    case 'WebSearch':
       return 'Searching the web';
     case 'task':
-    case 'Task':
-    case 'agent':
-    case 'Agent': {
+    case 'agent': {
       const desc = typeof input.description === 'string' ? input.description : '';
       return desc ? `Subtask: ${desc.slice(0, 40)}${desc.length > 40 ? '...' : ''}` : 'Running subtask';
     }
@@ -181,7 +246,7 @@ function formatToolStatus(toolName: string, input: Record<string, unknown>): str
   }
 }
 
-// Watch trajectory file for real-time updates
+// Watch trajectory file
 function watchTrajectoryFile(agent: AgentState): void {
   if (!agent.trajectoryFile || agent.isWatching) return;
 
@@ -194,7 +259,6 @@ function watchTrajectoryFile(agent: AgentState): void {
   fileWatchers.set(agent.id, watcher);
   agent.isWatching = true;
   
-  // Initial parse
   parseTrajectoryFile(agent.trajectoryFile, agent);
 }
 
@@ -207,7 +271,7 @@ function stopWatchingTrajectoryFile(agentId: string): void {
   }
 }
 
-// Parse session key to create human-readable label
+// Parse session key
 function parseSessionKey(sessionKey: string): { label: string; channel: string; context: string } {
   const parts = sessionKey.split(':');
   
@@ -216,7 +280,6 @@ function parseSessionKey(sessionKey: string): { label: string; channel: string; 
     const channelType = parts[2];
     const channelId = parts[3];
     
-    // Map channel types to readable names
     const channelNames: Record<string, string> = {
       'discord': 'Discord',
       'whatsapp': 'WhatsApp',
@@ -228,7 +291,6 @@ function parseSessionKey(sessionKey: string): { label: string; channel: string; 
     
     const channelName = channelNames[channelType] || channelType;
     
-    // Try to identify specific channels by ID
     const knownChannels: Record<string, string> = {
       '1498224182117269586': '#general',
       '1498283683419787434': '#ui-for-ashbot', 
@@ -249,7 +311,7 @@ function parseSessionKey(sessionKey: string): { label: string; channel: string; 
   return { label: sessionKey, channel: 'unknown', context: '' };
 }
 
-// Read OpenClaw sessions from filesystem
+// Read sessions
 async function readOpenClawSessions(): Promise<Array<{
   sessionKey: string;
   label: string;
@@ -291,7 +353,6 @@ async function readOpenClawSessions(): Promise<Array<{
         const trajectoryPath = sessionPath.replace('.jsonl', '.trajectory.jsonl');
         
         try {
-          // Read trajectory file if it exists - it has the sessionKey
           let sessionKey: string | undefined;
           if (fs.existsSync(trajectoryPath)) {
             const trajContent = fs.readFileSync(trajectoryPath, 'utf-8');
@@ -302,12 +363,10 @@ async function readOpenClawSessions(): Promise<Array<{
             }
           }
           
-          // Fallback to constructing from filename
           if (!sessionKey) {
             sessionKey = `agent:${agentId}:session:${sessionFile.replace('.jsonl', '')}`;
           }
           
-          // Read session file for any additional metadata
           let sessionCwd = 'Unknown';
           try {
             const content = fs.readFileSync(sessionPath, 'utf-8');
@@ -318,10 +377,8 @@ async function readOpenClawSessions(): Promise<Array<{
             }
           } catch { /* ignore */ }
           
-          // Parse session key for better label
           const sessionInfo = parseSessionKey(sessionKey);
           
-          // Override context with cwd if not from a known channel
           if (sessionInfo.context === sessionInfo.channel) {
             sessionInfo.context = path.basename(sessionCwd) || 'Workspace';
           }
@@ -370,9 +427,9 @@ async function pollOpenClawAgents(): Promise<void> {
           isWatching: false,
           channel: session.channel,
           context: session.context,
+          recentActivities: [],
         };
         
-        // Get initial file position
         if (session.trajectoryFile && fs.existsSync(session.trajectoryFile)) {
           const stats = fs.statSync(session.trajectoryFile);
           newAgent.filePosition = stats.size;
@@ -380,7 +437,6 @@ async function pollOpenClawAgents(): Promise<void> {
         
         agents.set(key, newAgent);
         
-        // Start watching trajectory file
         if (session.trajectoryFile) {
           watchTrajectoryFile(newAgent);
         }
@@ -394,11 +450,10 @@ async function pollOpenClawAgents(): Promise<void> {
           context: session.context,
           isSubagent: session.isSubagent,
         });
-        console.log(`[Bridge] New agent detected: ${key} (${session.label})`);
+        console.log(`[Bridge] New agent: ${session.label}`);
       }
     }
 
-    // Remove stale agents
     for (const [key, agent] of agents) {
       if (!currentKeys.has(key)) {
         stopWatchingTrajectoryFile(key);
@@ -407,11 +462,10 @@ async function pollOpenClawAgents(): Promise<void> {
           type: 'agentClosed',
           id: key,
         });
-        console.log(`[Bridge] Agent removed: ${key}`);
+        console.log(`[Bridge] Agent removed: ${agent.label}`);
       }
     }
 
-    // If no agents found, add a demo agent
     if (agents.size === 0) {
       const demoKey = 'demo-agent-1';
       if (!agents.has(demoKey)) {
@@ -427,6 +481,9 @@ async function pollOpenClawAgents(): Promise<void> {
           isWatching: false,
           channel: 'Demo',
           context: 'Local',
+          recentActivities: [
+            { type: 'status', description: 'Demo agent initialized', timestamp: Date.now() }
+          ],
         };
         agents.set(demoKey, demoAgent);
         broadcast({
@@ -438,7 +495,7 @@ async function pollOpenClawAgents(): Promise<void> {
           context: 'Local',
           isSubagent: false,
         });
-        console.log(`[Bridge] Added demo agent`);
+        console.log(`[Bridge] Demo agent added`);
       }
     }
   } catch (error) {
@@ -446,15 +503,13 @@ async function pollOpenClawAgents(): Promise<void> {
   }
 }
 
-// Setup Express + WebSocket
+// Setup Express
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Serve static files from client build
 app.use(express.static(path.join(__dirname, '../client')));
 
-// API endpoints
 app.get('/api/agents', (_req, res) => {
   res.json(Array.from(agents.values()));
 });
@@ -463,22 +518,21 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', agents: agents.size });
 });
 
-// WebSocket handling
 wss.on('connection', (ws) => {
   console.log('[Bridge] Client connected');
   clients.add(ws);
 
-  // Send current agents
   for (const [id, agent] of agents) {
     ws.send(JSON.stringify({
       type: 'agentCreated',
       id,
       label: agent.label,
       folderName: agent.agentId,
+      channel: agent.channel,
+      context: agent.context,
       isSubagent: agent.isSubagent,
     }));
     
-    // Also send current status
     if (agent.currentTool) {
       ws.send(JSON.stringify({
         type: 'agentToolStart',
@@ -488,12 +542,26 @@ wss.on('connection', (ws) => {
         toolName: agent.currentTool,
       }));
     }
+    
+    if (agent.recentActivities.length > 0) {
+      ws.send(JSON.stringify({
+        type: 'agentActivity',
+        id,
+        activities: agent.recentActivities,
+      }));
+    }
   }
 
   ws.on('message', (data) => {
     try {
       const msg = JSON.parse(data.toString()) as ClientMessage;
-      handleClientMessage(ws, msg);
+      if (msg.type === 'focusAgent') {
+        console.log('[Bridge] Focus:', msg.id);
+      } else if (msg.type === 'closeAgent') {
+        console.log('[Bridge] Close:', msg.id);
+      } else if (msg.type === 'requestRefresh') {
+        pollOpenClawAgents();
+      }
     } catch (e) {
       console.error('Invalid message:', e);
     }
@@ -510,90 +578,21 @@ wss.on('connection', (ws) => {
   });
 });
 
-function handleClientMessage(_ws: WebSocket, msg: ClientMessage): void {
-  switch (msg.type) {
-    case 'focusAgent': {
-      const agentId = msg.id as string;
-      console.log('[Bridge] Focus agent:', agentId);
-      break;
-    }
-    case 'closeAgent': {
-      const agentId = msg.id as string;
-      console.log('[Bridge] Close agent:', agentId);
-      break;
-    }
-    case 'requestRefresh': {
-      pollOpenClawAgents();
-      break;
-    }
-  }
-}
-
-// Simulate activity for agents without trajectory files
-function simulateActivity(): void {
-  for (const [id, agent] of agents) {
-    // Skip agents with real trajectory files
-    if (agent.trajectoryFile) continue;
-    
-    if (Math.random() < 0.1) {
-      const tools = ['Read', 'Write', 'Bash', 'WebSearch', 'Task'];
-      const tool = tools[Math.floor(Math.random() * tools.length)];
-      agent.currentTool = tool;
-      agent.toolStatus = `${tool}ing...`;
-      agent.status = 'active';
-      agent.lastActivity = Date.now();
-
-      broadcast({
-        type: 'agentToolStart',
-        id,
-        toolId: tool,
-        status: agent.toolStatus,
-        toolName: tool,
-      });
-
-      setTimeout(() => {
-        agent.currentTool = undefined;
-        agent.toolStatus = undefined;
-        agent.status = 'waiting';
-        broadcast({
-          type: 'agentToolDone',
-          id,
-          toolId: tool,
-        });
-        broadcast({
-          type: 'agentStatus',
-          id,
-          status: 'waiting',
-        });
-      }, 2000 + Math.random() * 3000);
-    }
-  }
-}
-
-// Start server
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3002;
 
 server.listen(PORT, () => {
   console.log(`🚀 OpenClaw Pixel UI Server running on port ${PORT}`);
-  console.log(`📊 Web UI available at http://localhost:${PORT}`);
-  console.log(`🔍 Watching trajectory files in: ${OPENCLAW_AGENTS_DIR}`);
+  console.log(`📊 Web UI: http://localhost:${PORT}`);
+  console.log(`🔍 Watching: ${OPENCLAW_AGENTS_DIR}`);
 
-  // Initial poll
   pollOpenClawAgents();
-  
-  // Start polling every 5 seconds
   pollInterval = setInterval(pollOpenClawAgents, 5000);
-
-  // Simulate activity for demo agents
-  setInterval(simulateActivity, 5000);
 });
 
-// Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
   if (pollInterval) clearInterval(pollInterval);
   
-  // Close all file watchers
   for (const [agentId, watcher] of fileWatchers) {
     watcher.close();
     console.log(`[Bridge] Stopped watching: ${agentId}`);

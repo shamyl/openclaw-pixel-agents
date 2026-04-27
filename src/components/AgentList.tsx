@@ -19,7 +19,25 @@ const statusColors = {
   idle: '#6c757d',
 };
 
+const activityIcons: Record<string, string> = {
+  tool: '🔧',
+  status: '📊',
+  message: '💬',
+};
+
+function formatTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString('en-US', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false 
+  });
+}
+
 export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentListProps) {
+  const selectedAgentData = selectedAgent ? agents.find(a => a.id === selectedAgent) : null;
+
   return (
     <div className="agent-list">
       <h3>Agents ({agents.length})</h3>
@@ -37,7 +55,7 @@ export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentLis
                 <span className="agent-type">
                   {agent.isSubagent ? '🔀' : '🤖'}
                 </span>
-                <span className="agent-name">
+                <span className="agent-name" title={agent.id}>
                   {agent.label || agent.id.slice(0, 16)}
                 </span>
                 <span
@@ -71,6 +89,26 @@ export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentLis
               )}
             </div>
           ))
+        )}
+        
+        {/* Activity Log for Selected Agent */}
+        {selectedAgentData && (
+          <div className="activity-log">
+            <h4>Recent Activity</h4>
+            {selectedAgentData.recentActivities && selectedAgentData.recentActivities.length > 0 ? (
+              <div className="activity-list">
+                {selectedAgentData.recentActivities.map((activity, index) => (
+                  <div key={index} className="activity-item">
+                    <span className="activity-icon">{activityIcons[activity.type] || '•'}</span>
+                    <span className="activity-time">{formatTime(activity.timestamp)}</span>
+                    <span className="activity-desc">{activity.description}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="no-activity">No recent activity</div>
+            )}
+          </div>
         )}
       </div>
     </div>

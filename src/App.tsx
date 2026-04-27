@@ -160,6 +160,16 @@ function App() {
         );
         break;
       }
+      case 'agentActivity': {
+        setAgents((prev) =>
+          prev.map((a) =>
+            a.id === msg.id
+              ? { ...a, recentActivities: msg.activities as Agent['recentActivities'] }
+              : a
+          )
+        );
+        break;
+      }
     }
   }, []);
 

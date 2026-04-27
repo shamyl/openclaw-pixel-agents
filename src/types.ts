@@ -1,3 +1,9 @@
+export interface ActivityEvent {
+  type: 'tool' | 'status' | 'message';
+  description: string;
+  timestamp: number;
+}
+
 export interface Agent {
   id: string;
   label?: string;
@@ -8,6 +14,7 @@ export interface Agent {
   currentTool?: string;
   channel?: string;
   context?: string;
+  recentActivities?: ActivityEvent[];
   x: number;
   y: number;
 }
