@@ -29,6 +29,24 @@ export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentLis
   return (
     <div className="agent-list">
       <h3>Agents ({agents.length})</h3>
+      
+      {/* Status Legend */}
+      <div className="status-legend">
+        <div className="legend-title">Status:</div>
+        <div className="legend-item">
+          <span className="legend-dot" style={{ color: statusColors.active }}>●</span>
+          <span>Active</span>
+        </div>
+        <div className="legend-item">
+          <span className="legend-dot" style={{ color: statusColors.waiting }}>●</span>
+          <span>Waiting</span>
+        </div>
+        <div className="legend-item">
+          <span className="legend-dot" style={{ color: statusColors.idle }}>●</span>
+          <span>Idle</span>
+        </div>
+      </div>
+      
       <div className="agent-list-content">
         {agents.length === 0 ? (
           <div className="no-agents">No active agents</div>

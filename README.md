@@ -2,125 +2,96 @@
 
 A web-based visualization dashboard for OpenClaw agents and sub-agents, inspired by [Pixel Agents](https://github.com/pablodelucca/pixel-agents).
 
-## What is this?
+![OpenClaw Pixel Agents UI](https://github.com/shamyl/openclaw-pixel-agents/raw/main/docs/screenshot.png)
 
-This UI shows your OpenClaw agents as animated pixel art characters working in an office. Each agent gets a desk, and you can see:
-- Which agents are active (typing animations)
-- Which agents are waiting for user input
-- What tools each agent is currently using
-- Sub-agents spawned from parent sessions
+## Features
 
-![Office Screenshot](./docs/screenshot.png)
+- 🎨 **Pixel Art Office** - Agents appear as animated pixel characters at their desks
+- 📡 **Real-time Status** - Live updates via WebSocket showing what agents are doing
+- 🖥️ **10 Workstations** - Office layout with desks, computers, and furniture
+- 📊 **Activity Log** - Click any agent to see recent tool usage and events
+- 🎯 **Status Indicators**:
+  - 🟢 **Green dot** = Active (working on tasks)
+  - 🟡 **Yellow dot** = Waiting (idle, waiting for input)
+  - ⚫ **Gray dot** = Idle (no current activity)
 
 ## Quick Start
 
 ```bash
-cd openclaw-pixel-ui
+# Clone the repository
+git clone https://github.com/shamyl/openclaw-pixel-agents.git
+cd openclaw-pixel-agents
 
-# Install dependencies (first time only)
+# Install dependencies
 npm install
 
-# Build everything
+# Build the project
 npm run build
 
 # Start the server
 npm start
 ```
 
-Then open http://localhost:3001 in your browser.
+Open http://localhost:3002 in your browser.
+
+## Status Legend
+
+| Indicator | Meaning |
+|-----------|---------|
+| **● Green** | Agent is active - currently processing or using tools |
+| **● Yellow** | Agent is waiting - completed task, waiting for next input |
+| **● Gray** | Agent is idle - no recent activity |
+| **WORKING** | Animated text appears when agent is actively typing/processing |
+| **IDLE** | Shows when agent is in waiting state |
 
 ## How It Works
 
+The UI connects to OpenClaw by:
+
+1. **Reading session files** from `~/.openclaw/agents/{agent}/sessions/`
+2. **Watching trajectory files** for real-time events (tool calls, session status)
+3. **Broadcasting via WebSocket** to update the browser instantly
+
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Web Browser (UI)                         │
-│  ┌─────────────────────────────────────────────────────┐      │
-│  │  React + Canvas Office View                         │      │
-│  │  - Pixel characters for each agent                 │      │
-│  │  - Real-time status animations                      │      │
-│  └─────────────────────────────────────────────────────┘      │
-└─────────────────────────────────────────────────────────────┘
-                              │ WebSocket
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│              OpenClaw Agent Bridge Server                  │
-│  ┌─────────────────────────────────────────────────────┐  │
-│  │  - Polls `openclaw subagents list`                  │  │
-│  │  - Polls `openclaw sessions list`                   │  │
-│  │  - Broadcasts agent state via WebSocket             │  │
-│  └─────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    OpenClaw Daemon                           │
-└─────────────────────────────────────────────────────────────┘
+OpenClaw → Trajectory Files → File Watcher → WebSocket → Browser UI
 ```
 
-## Development Mode
-
-For development with hot reload:
+## Development
 
 ```bash
-# Terminal 1: Start the server
-npm run dev:server
+# Run in development mode with hot reload
+npm run dev
 
-# Terminal 2: Start the client dev server
-npm run dev:client
+# Build for production
+npm run build
+
+# Run production server
+npm start
 ```
 
-## Features
+## Office Elements
 
-- ✅ Real-time WebSocket updates
-- ✅ Visual office layout with desks, walls, decorations
-- ✅ Agent status animations (idle/waiting/active)
-- ✅ Tool usage indicators
-- ✅ Sub-agent visualization (linked to parents)
-- ✅ Click agents to focus/select
-- ✅ Auto-reconnect on disconnect
+- 🖥️ **Desks with computers** - Each agent has their own workstation
+- 📚 **Bookshelves** - Office decor with colored books
+- 🥤 **Vending machine** - Break room appliance
+- 💧 **Water cooler** - Office amenities
+- 🌿 **Plants** - Decoration in corners
 
-## Architecture Decisions
+## Architecture
 
-### Why WebSocket instead of file polling?
-Pixel Agents watches JSONL files. OpenClaw doesn't currently write JSONL transcripts, so we use:
-1. **Polling**: `subagents list` and `sessions list` via CLI
-2. **WebSocket**: Push updates to browser in real-time
+- **Frontend**: React + TypeScript + Vite + HTML5 Canvas
+- **Backend**: Node.js + Express + WebSocket (ws)
+- **File Watching**: `fs.watch()` on OpenClaw trajectory files
 
-### Future Improvements
-1. **Hook into OpenClaw events**: If OpenClaw adds event streaming, we can replace polling
-2. **Activity simulation**: Currently simulates tool activity for demo purposes
-3. **Better sub-agent linking**: Parent-child relationships from session keys
-4. **Persistent layouts**: Save custom office configurations
-5. **Character sprites**: Replace emojis with pixel art characters
+## Session Types
 
-## File Structure
-
-```
-openclaw-pixel-ui/
-├── server/           # Express + WebSocket server
-│   └── index.ts      # Main server code
-├── src/              # React frontend
-│   ├── components/   # UI components
-│   ├── types.ts      # TypeScript definitions
-│   ├── App.tsx       # Main app
-│   └── index.css     # Styles
-├── dist/             # Built output
-│   ├── server/       # Compiled server
-│   └── client/       # Compiled client
-└── README.md
-```
-
-## Technologies
-
-- **Frontend**: React, TypeScript, Vite, Canvas API
-- **Backend**: Express, WebSocket (ws), TypeScript
-- **Dev Tools**: tsx, concurrently
+The UI automatically detects:
+- **Discord channels** - Shows as "Discord #channel-name"
+- **WhatsApp chats** - Shows as "WhatsApp direct"
+- **Other channels** - Shows platform and context
 
 ## Credits
 
-- Original concept: [pablodelucca/pixel-agents](https://github.com/pablodelucca/pixel-agents)
-- Built for [OpenClaw](https://github.com/openclaw/openclaw)
-
-## License
-
-MIT (same as Pixel Agents)
+- Inspired by: [pablodelucca/pixel-agents](https://github.com/pablodelucca/pixel-agents)
+- Built for: [OpenClaw](https://github.com/openclaw/openclaw)
+- License: MIT
