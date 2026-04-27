@@ -23,6 +23,8 @@ interface AgentState {
   trajectoryFile?: string;
   filePosition: number;
   isWatching: boolean;
+  channel: string;
+  context: string;
 }
 
 interface ToolEvent {
@@ -205,6 +207,48 @@ function stopWatchingTrajectoryFile(agentId: string): void {
   }
 }
 
+// Parse session key to create human-readable label
+function parseSessionKey(sessionKey: string): { label: string; channel: string; context: string } {
+  const parts = sessionKey.split(':');
+  
+  if (parts.length >= 4 && parts[0] === 'agent') {
+    const agentName = parts[1];
+    const channelType = parts[2];
+    const channelId = parts[3];
+    
+    // Map channel types to readable names
+    const channelNames: Record<string, string> = {
+      'discord': 'Discord',
+      'whatsapp': 'WhatsApp',
+      'imessage': 'iMessage',
+      'slack': 'Slack',
+      'telegram': 'Telegram',
+      'signal': 'Signal',
+    };
+    
+    const channelName = channelNames[channelType] || channelType;
+    
+    // Try to identify specific channels by ID
+    const knownChannels: Record<string, string> = {
+      '1498224182117269586': '#general',
+      '1498283683419787434': '#ui-for-ashbot', 
+      '1498280506478039150': '#dev',
+      '1498282151181811823': '#testing',
+      '+923333276571': 'Personal',
+    };
+    
+    const channelLabel = knownChannels[channelId] || channelId.slice(0, 8);
+    
+    return {
+      label: `${agentName} • ${channelName} ${channelLabel}`,
+      channel: channelName,
+      context: channelLabel
+    };
+  }
+  
+  return { label: sessionKey, channel: 'unknown', context: '' };
+}
+
 // Read OpenClaw sessions from filesystem
 async function readOpenClawSessions(): Promise<Array<{
   sessionKey: string;
@@ -212,6 +256,8 @@ async function readOpenClawSessions(): Promise<Array<{
   agentId: string;
   isSubagent: boolean;
   trajectoryFile?: string;
+  channel: string;
+  context: string;
 }>> {
   const sessions: Array<{
     sessionKey: string;
@@ -219,6 +265,8 @@ async function readOpenClawSessions(): Promise<Array<{
     agentId: string;
     isSubagent: boolean;
     trajectoryFile?: string;
+    channel: string;
+    context: string;
   }> = [];
 
   try {
@@ -243,22 +291,50 @@ async function readOpenClawSessions(): Promise<Array<{
         const trajectoryPath = sessionPath.replace('.jsonl', '.trajectory.jsonl');
         
         try {
-          const content = fs.readFileSync(sessionPath, 'utf-8');
-          const lines = content.trim().split('\n').filter(l => l.trim());
-          
-          if (lines.length > 0) {
-            const firstRecord = JSON.parse(lines[0]);
-            const sessionKey = firstRecord.session_key || 
-                              `agent:${agentId}:session:${sessionFile.replace('.jsonl', '')}`;
-            
-            sessions.push({
-              sessionKey,
-              label: firstRecord.label || `${agentId} session`,
-              agentId,
-              isSubagent: agentId !== 'main',
-              trajectoryFile: fs.existsSync(trajectoryPath) ? trajectoryPath : undefined
-            });
+          // Read trajectory file if it exists - it has the sessionKey
+          let sessionKey: string | undefined;
+          if (fs.existsSync(trajectoryPath)) {
+            const trajContent = fs.readFileSync(trajectoryPath, 'utf-8');
+            const trajLines = trajContent.trim().split('\n').filter(l => l.trim());
+            if (trajLines.length > 0) {
+              const trajRecord = JSON.parse(trajLines[0]);
+              sessionKey = trajRecord.sessionKey || trajRecord.session_key;
+            }
           }
+          
+          // Fallback to constructing from filename
+          if (!sessionKey) {
+            sessionKey = `agent:${agentId}:session:${sessionFile.replace('.jsonl', '')}`;
+          }
+          
+          // Read session file for any additional metadata
+          let sessionCwd = 'Unknown';
+          try {
+            const content = fs.readFileSync(sessionPath, 'utf-8');
+            const lines = content.trim().split('\n').filter(l => l.trim());
+            if (lines.length > 0) {
+              const record = JSON.parse(lines[0]);
+              sessionCwd = record.cwd || 'Unknown';
+            }
+          } catch { /* ignore */ }
+          
+          // Parse session key for better label
+          const sessionInfo = parseSessionKey(sessionKey);
+          
+          // Override context with cwd if not from a known channel
+          if (sessionInfo.context === sessionInfo.channel) {
+            sessionInfo.context = path.basename(sessionCwd) || 'Workspace';
+          }
+          
+          sessions.push({
+            sessionKey,
+            label: sessionInfo.label,
+            agentId,
+            isSubagent: agentId !== 'main',
+            trajectoryFile: fs.existsSync(trajectoryPath) ? trajectoryPath : undefined,
+            channel: sessionInfo.channel,
+            context: sessionInfo.context
+          });
         } catch (e) {
           // Skip malformed files
         }
@@ -292,6 +368,8 @@ async function pollOpenClawAgents(): Promise<void> {
           trajectoryFile: session.trajectoryFile,
           filePosition: 0,
           isWatching: false,
+          channel: session.channel,
+          context: session.context,
         };
         
         // Get initial file position
@@ -312,6 +390,8 @@ async function pollOpenClawAgents(): Promise<void> {
           id: key,
           label: session.label,
           folderName: session.agentId,
+          channel: session.channel,
+          context: session.context,
           isSubagent: session.isSubagent,
         });
         console.log(`[Bridge] New agent detected: ${key} (${session.label})`);
@@ -345,6 +425,8 @@ async function pollOpenClawAgents(): Promise<void> {
           isSubagent: false,
           filePosition: 0,
           isWatching: false,
+          channel: 'Demo',
+          context: 'Local',
         };
         agents.set(demoKey, demoAgent);
         broadcast({
@@ -352,6 +434,8 @@ async function pollOpenClawAgents(): Promise<void> {
           id: demoKey,
           label: 'Ash (Main)',
           folderName: 'main',
+          channel: 'Demo',
+          context: 'Local',
           isSubagent: false,
         });
         console.log(`[Bridge] Added demo agent`);

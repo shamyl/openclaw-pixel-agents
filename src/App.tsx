@@ -121,6 +121,8 @@ function App() {
           folderName: msg.folderName as string | undefined,
           isSubagent: msg.isSubagent as boolean | undefined,
           parentAgentId: msg.parentAgentId as string | undefined,
+          channel: msg.channel as string | undefined,
+          context: msg.context as string | undefined,
           status: 'idle',
           x: 0,
           y: 0,

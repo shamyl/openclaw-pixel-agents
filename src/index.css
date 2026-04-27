@@ -201,6 +201,16 @@ body {
   color: #ffd93d;
 }
 
+.agent-channel {
+  font-size: 11px;
+  color: #3498db;
+}
+
+.agent-context {
+  font-size: 10px;
+  color: #9b59b6;
+}
+
 .close-btn {
   margin-top: 10px;
   margin-left: 22px;

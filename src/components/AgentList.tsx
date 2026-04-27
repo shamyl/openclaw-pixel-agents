@@ -48,8 +48,11 @@ export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentLis
                 </span>
               </div>
               <div className="agent-details">
-                {agent.folderName && (
-                  <span className="agent-folder">📁 {agent.folderName}</span>
+                {agent.channel && (
+                  <span className="agent-channel">📡 {agent.channel}</span>
+                )}
+                {agent.context && (
+                  <span className="agent-context">📍 {agent.context}</span>
                 )}
                 {agent.currentTool && (
                   <span className="agent-tool">🔧 {agent.currentTool}</span>

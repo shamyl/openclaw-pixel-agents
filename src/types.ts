@@ -6,6 +6,8 @@ export interface Agent {
   parentAgentId?: string;
   status: 'active' | 'waiting' | 'idle';
   currentTool?: string;
+  channel?: string;
+  context?: string;
   x: number;
   y: number;
 }
