@@ -2,7 +2,9 @@
 
 A web-based visualization dashboard for OpenClaw agents and sub-agents, inspired by [Pixel Agents](https://github.com/pablodelucca/pixel-agents).
 
-![OpenClaw Pixel Agents UI](https://github.com/shamyl/openclaw-pixel-agents/raw/main/docs/screenshot.png)
+OpenClaw Pixel Agents UI
+<img width="967" height="564" alt="image" src="https://github.com/user-attachments/assets/401edbea-de6e-4e44-a698-6ebd61d80965" />
+
 
 ## Features
 
