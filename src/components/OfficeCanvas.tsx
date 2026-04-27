@@ -9,21 +9,14 @@ interface OfficeCanvasProps {
 }
 
 const TILE_SIZE = 32;
-const AGENT_SIZE = 24;
+const AGENT_SIZE = 20;
 
-// Simple agent colors based on status
+// Agent colors by status
 const AGENT_COLORS = {
   active: '#00ff88',
-  waiting: '#ffd93d',
+  waiting: '#ffd93d', 
   idle: '#6c757d',
   selected: '#e94560',
-};
-
-// Agent status emojis
-const AGENT_EMOJIS = {
-  idle: '😴',
-  waiting: '⏳',
-  active: '⚡',
 };
 
 export function OfficeCanvas({
@@ -36,7 +29,6 @@ export function OfficeCanvas({
   const animationRef = useRef<number | null>(null);
   const agentAnimations = useRef<Map<string, AgentAnimation>>(new Map());
 
-  // Calculate canvas dimensions
   const canvasWidth = layout.cols * TILE_SIZE;
   const canvasHeight = layout.rows * TILE_SIZE;
 
@@ -44,10 +36,9 @@ export function OfficeCanvas({
   useEffect(() => {
     agents.forEach((agent, index) => {
       if (!agentAnimations.current.has(agent.id)) {
-        // Assign a desk position based on index
         const desk = layout.desks[index % layout.desks.length];
         const x = desk.col * TILE_SIZE + TILE_SIZE / 2;
-        const y = desk.row * TILE_SIZE + TILE_SIZE / 2 + 16; // Offset to stand in front of desk
+        const y = desk.row * TILE_SIZE + TILE_SIZE / 2 + 20;
         
         agent.x = x;
         agent.y = y;
@@ -55,27 +46,11 @@ export function OfficeCanvas({
         agentAnimations.current.set(agent.id, {
           frame: 0,
           state: agent.status === 'active' ? 'typing' : 'idle',
-          direction: desk.facing === 'south' ? 'down' : 'up',
+          direction: 'down',
         });
       }
     });
   }, [agents, layout.desks]);
-
-  // Update agent animations based on status
-  useEffect(() => {
-    agents.forEach((agent) => {
-      const anim = agentAnimations.current.get(agent.id);
-      if (anim) {
-        if (agent.status === 'active') {
-          anim.state = agent.currentTool?.toLowerCase().includes('write') ? 'typing' : 'reading';
-        } else if (agent.status === 'waiting') {
-          anim.state = 'idle';
-        } else {
-          anim.state = 'idle';
-        }
-      }
-    });
-  }, [agents]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -84,142 +59,164 @@ export function OfficeCanvas({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Clear canvas
+    // Clear
     ctx.fillStyle = '#1a1a2e';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Draw floor
-    ctx.fillStyle = layout.floorColor;
+    // Draw floor tiles
     for (let row = 0; row < layout.rows; row++) {
       for (let col = 0; col < layout.cols; col++) {
         const x = col * TILE_SIZE;
         const y = row * TILE_SIZE;
-        ctx.fillRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+        
+        // Wood floor pattern
+        ctx.fillStyle = (row + col) % 2 === 0 ? '#3d2914' : '#4a3420';
+        ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+        
+        // Tile border
+        ctx.strokeStyle = '#2d1f0e';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
       }
     }
 
-    // Draw walls
-    ctx.fillStyle = layout.wallColor;
-    layout.walls.forEach((wall) => {
-      const x = wall.col * TILE_SIZE;
-      const y = wall.row * TILE_SIZE;
-      ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-      // Add 3D effect
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.fillRect(x, y + TILE_SIZE - 4, TILE_SIZE, 4);
-      ctx.fillStyle = layout.wallColor;
-    });
+    // Draw walls (top and bottom borders)
+    ctx.fillStyle = '#2c3e50';
+    for (let col = 0; col < layout.cols; col++) {
+      // Top wall
+      ctx.fillRect(col * TILE_SIZE, 0, TILE_SIZE, TILE_SIZE);
+      // Bottom wall  
+      ctx.fillRect(col * TILE_SIZE, (layout.rows - 1) * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    }
+    for (let row = 1; row < layout.rows - 1; row++) {
+      // Left wall
+      ctx.fillRect(0, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+      // Right wall
+      ctx.fillRect((layout.cols - 1) * TILE_SIZE, row * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    }
+
+    // Draw bookshelves
+    ctx.fillStyle = '#8b4513';
+    ctx.fillRect(TILE_SIZE * 2, TILE_SIZE * 1, TILE_SIZE * 3, TILE_SIZE);
+    ctx.fillRect(TILE_SIZE * 2, TILE_SIZE * 2, TILE_SIZE * 3, TILE_SIZE);
+    // Books
+    ctx.fillStyle = '#e74c3c'; ctx.fillRect(TILE_SIZE * 2.2, TILE_SIZE * 1.2, TILE_SIZE * 0.15, TILE_SIZE * 0.6);
+    ctx.fillStyle = '#3498db'; ctx.fillRect(TILE_SIZE * 2.4, TILE_SIZE * 1.2, TILE_SIZE * 0.15, TILE_SIZE * 0.6);
+    ctx.fillStyle = '#2ecc71'; ctx.fillRect(TILE_SIZE * 2.6, TILE_SIZE * 1.2, TILE_SIZE * 0.15, TILE_SIZE * 0.6);
+
+    // Draw vending machine
+    ctx.fillStyle = '#34495e';
+    ctx.fillRect(TILE_SIZE * 14, TILE_SIZE * 1, TILE_SIZE * 1.5, TILE_SIZE * 2);
+    ctx.fillStyle = '#95a5a6';
+    ctx.fillRect(TILE_SIZE * 14.1, TILE_SIZE * 1.2, TILE_SIZE * 1.3, TILE_SIZE * 1.5);
+
+    // Draw water cooler
+    ctx.fillStyle = '#ecf0f1';
+    ctx.beginPath();
+    ctx.arc(TILE_SIZE * 10, TILE_SIZE * 1.5, TILE_SIZE * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#3498db';
+    ctx.fillRect(TILE_SIZE * 9.7, TILE_SIZE * 1.2, TILE_SIZE * 0.6, TILE_SIZE * 0.4);
 
     // Draw desks
-    layout.desks.forEach((desk) => {
+    layout.desks.forEach((desk, index) => {
       const x = desk.col * TILE_SIZE;
       const y = desk.row * TILE_SIZE;
       
-      // Desk surface
+      // Desk shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(x + 4, y + TILE_SIZE - 8, TILE_SIZE - 8, 4);
+      
+      // Desk
       ctx.fillStyle = '#8b6914';
-      ctx.fillRect(x + 2, y + 8, TILE_SIZE - 4, TILE_SIZE - 10);
+      ctx.fillRect(x + 4, y + 4, TILE_SIZE - 8, TILE_SIZE - 8);
       
-      // Computer
+      // Computer monitor
       ctx.fillStyle = '#2c3e50';
-      ctx.fillRect(x + 8, y + 4, TILE_SIZE - 16, 8);
-      
-      // Screen glow
+      ctx.fillRect(x + 10, y + 6, TILE_SIZE - 20, 8);
       ctx.fillStyle = '#3498db';
-      ctx.fillRect(x + 10, y + 5, TILE_SIZE - 20, 6);
+      ctx.fillRect(x + 12, y + 7, TILE_SIZE - 24, 6);
       
-      // Chair position indicator
-      const chairOffsets = {
-        north: { x: TILE_SIZE / 2, y: TILE_SIZE - 4 },
-        south: { x: TILE_SIZE / 2, y: 4 },
-        east: { x: 4, y: TILE_SIZE / 2 },
-        west: { x: TILE_SIZE - 4, y: TILE_SIZE / 2 },
-      };
-      const chair = chairOffsets[desk.facing];
-      ctx.fillStyle = '#34495e';
-      ctx.beginPath();
-      ctx.arc(x + chair.x, y + chair.y, 6, 0, Math.PI * 2);
-      ctx.fill();
-    });
-
-    // Draw decorations
-    layout.decorations.forEach((deco) => {
-      const x = deco.col * TILE_SIZE + TILE_SIZE / 2;
-      const y = deco.row * TILE_SIZE + TILE_SIZE / 2;
-      
-      ctx.font = '20px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      
-      const emojiMap: Record<string, string> = {
-        plant: '🌿',
-        watercooler: '💧',
-        printer: '🖨️',
-        couch: '🛋️',
-        table: '🪑',
-      };
-      ctx.fillText(emojiMap[deco.type] || '❓', x, y);
+      // Keyboard
+      ctx.fillStyle = '#7f8c8d';
+      ctx.fillRect(x + 10, y + 18, TILE_SIZE - 20, 4);
     });
 
     // Draw agents
     agents.forEach((agent) => {
       const anim = agentAnimations.current.get(agent.id);
       const isSelected = agent.id === selectedAgent;
-      
-      // Agent position
       const x = agent.x;
       const y = agent.y;
+      
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(x, y + AGENT_SIZE/2 + 4, AGENT_SIZE/2, AGENT_SIZE/4, 0, 0, Math.PI * 2);
+      ctx.fill();
       
       // Selection glow
       if (isSelected) {
         ctx.shadowColor = AGENT_COLORS.selected;
-        ctx.shadowBlur = 20;
+        ctx.shadowBlur = 15;
       }
       
-      // Agent body (simple pixel circle)
+      // Body (pixel style rectangle)
       ctx.fillStyle = agent.isSubagent ? '#9b59b6' : '#3498db';
-      ctx.beginPath();
-      ctx.arc(x, y, AGENT_SIZE / 2, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillRect(x - AGENT_SIZE/2, y - AGENT_SIZE/2, AGENT_SIZE, AGENT_SIZE);
+      
+      // Head
+      ctx.fillStyle = '#f39c12';
+      ctx.fillRect(x - AGENT_SIZE/2 + 2, y - AGENT_SIZE/2 - 6, AGENT_SIZE - 4, 6);
+      
+      // Eyes
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x - 4, y - AGENT_SIZE/2 - 4, 2, 2);
+      ctx.fillRect(x + 2, y - AGENT_SIZE/2 - 4, 2, 2);
+      
       ctx.shadowBlur = 0;
       
-      // Status indicator ring
+      // Status indicator (small dot)
       const statusColor = AGENT_COLORS[agent.status];
-      ctx.strokeStyle = statusColor;
-      ctx.lineWidth = isSelected ? 3 : 2;
+      ctx.fillStyle = statusColor;
       ctx.beginPath();
-      ctx.arc(x, y, AGENT_SIZE / 2 + 2, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.lineWidth = 1;
+      ctx.arc(x + AGENT_SIZE/2 - 2, y - AGENT_SIZE/2 - 2, 3, 0, Math.PI * 2);
+      ctx.fill();
       
-      // Agent emoji based on status
-      ctx.font = '14px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(AGENT_EMOJIS[agent.status], x, y);
-      
-      // Activity indicator animation
-      if (anim?.state === 'typing' || anim?.state === 'reading') {
-        const bounce = Math.sin(Date.now() / 200) * 3;
+      // Activity indicator
+      if (agent.status === 'active') {
+        const bounce = Math.sin(Date.now() / 150) * 2;
         ctx.fillStyle = AGENT_COLORS.active;
-        ctx.beginPath();
-        ctx.arc(x + 14, y - 14 + bounce, 4, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.fillRect(x - 2, y - AGENT_SIZE/2 - 12 + bounce, 4, 4);
       }
       
-      // Label
-      ctx.fillStyle = '#fff';
-      ctx.font = '10px Arial';
-      ctx.fillText(agent.label || agent.id.slice(0, 8), x, y + AGENT_SIZE / 2 + 12);
+      // Label background (for readability)
+      const label = agent.context || agent.label?.slice(0, 12) || agent.id.slice(0, 8);
+      ctx.font = 'bold 9px monospace';
+      const textWidth = ctx.measureText(label).width;
       
-      // Tool status
+      // Draw label below agent with background
+      const labelY = y + AGENT_SIZE/2 + 14;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(x - textWidth/2 - 4, labelY - 8, textWidth + 8, 14);
+      
+      ctx.fillStyle = isSelected ? '#e94560' : '#fff';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, x, labelY + 2);
+      
+      // Current tool indicator (small text above)
       if (agent.currentTool) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        const toolText = agent.currentTool.slice(0, 15);
+        const toolWidth = ctx.measureText(toolText).width;
+        ctx.fillRect(x - toolWidth/2 - 2, y - AGENT_SIZE/2 - 22, toolWidth + 4, 12);
+        
         ctx.fillStyle = '#ffd93d';
-        ctx.font = '9px Arial';
-        ctx.fillText(agent.currentTool, x, y - AGENT_SIZE / 2 - 8);
+        ctx.font = '8px monospace';
+        ctx.fillText(toolText, x, y - AGENT_SIZE/2 - 14);
       }
     });
 
-    // Animation loop
     animationRef.current = requestAnimationFrame(draw);
   }, [layout, agents, selectedAgent]);
 
@@ -243,7 +240,6 @@ export function OfficeCanvas({
       const clickX = (e.clientX - rect.left) * scaleX;
       const clickY = (e.clientY - rect.top) * scaleY;
 
-      // Find clicked agent
       for (const agent of agents) {
         const dx = clickX - agent.x;
         const dy = clickY - agent.y;
@@ -267,6 +263,7 @@ export function OfficeCanvas({
         cursor: 'pointer',
         display: 'block',
         margin: '0 auto',
+        borderRadius: '4px',
       }}
     />
   );

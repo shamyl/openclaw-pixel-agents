@@ -5,55 +5,43 @@ import { Toolbar } from './components/Toolbar';
 import { StatusBar } from './components/StatusBar';
 import type { Agent, OfficeConfig } from './types';
 
-// Default office layout
+// Default office layout - similar to Pixel Agents reference
 const defaultLayout: OfficeConfig = {
-  rows: 12,
-  cols: 20,
-  floorColor: '#2d3436',
-  wallColor: '#636e72',
+  rows: 14,
+  cols: 24,
+  floorColor: '#3d2914',
+  wallColor: '#2c3e50',
   desks: [
-    { id: 'desk1', row: 2, col: 3, type: 'computer', facing: 'south' },
-    { id: 'desk2', row: 2, col: 7, type: 'computer', facing: 'south' },
-    { id: 'desk3', row: 2, col: 11, type: 'computer', facing: 'south' },
-    { id: 'desk4', row: 2, col: 15, type: 'computer', facing: 'south' },
-    { id: 'desk5', row: 6, col: 3, type: 'computer', facing: 'north' },
-    { id: 'desk6', row: 6, col: 7, type: 'computer', facing: 'north' },
-    { id: 'desk7', row: 6, col: 11, type: 'computer', facing: 'north' },
-    { id: 'desk8', row: 6, col: 15, type: 'computer', facing: 'north' },
+    // Top row
+    { id: 'desk1', row: 3, col: 4, type: 'computer', facing: 'south' },
+    { id: 'desk2', row: 3, col: 8, type: 'computer', facing: 'south' },
+    { id: 'desk3', row: 3, col: 12, type: 'computer', facing: 'south' },
+    { id: 'desk4', row: 3, col: 16, type: 'computer', facing: 'south' },
+    { id: 'desk5', row: 3, col: 20, type: 'computer', facing: 'south' },
+    // Bottom row
+    { id: 'desk6', row: 8, col: 4, type: 'computer', facing: 'north' },
+    { id: 'desk7', row: 8, col: 8, type: 'computer', facing: 'north' },
+    { id: 'desk8', row: 8, col: 12, type: 'computer', facing: 'north' },
+    { id: 'desk9', row: 8, col: 16, type: 'computer', facing: 'north' },
+    { id: 'desk10', row: 8, col: 20, type: 'computer', facing: 'north' },
   ],
   walls: [
-    // Top wall
-    { row: 0, col: 0 }, { row: 0, col: 1 }, { row: 0, col: 2 },
-    { row: 0, col: 3 }, { row: 0, col: 4 }, { row: 0, col: 5 },
-    { row: 0, col: 6 }, { row: 0, col: 7 }, { row: 0, col: 8 },
-    { row: 0, col: 9 }, { row: 0, col: 10 }, { row: 0, col: 11 },
-    { row: 0, col: 12 }, { row: 0, col: 13 }, { row: 0, col: 14 },
-    { row: 0, col: 15 }, { row: 0, col: 16 }, { row: 0, col: 17 },
-    { row: 0, col: 18 }, { row: 0, col: 19 },
-    // Bottom wall
-    { row: 11, col: 0 }, { row: 11, col: 1 }, { row: 11, col: 2 },
-    { row: 11, col: 3 }, { row: 11, col: 4 }, { row: 11, col: 5 },
-    { row: 11, col: 6 }, { row: 11, col: 7 }, { row: 11, col: 8 },
-    { row: 11, col: 9 }, { row: 11, col: 10 }, { row: 11, col: 11 },
-    { row: 11, col: 12 }, { row: 11, col: 13 }, { row: 11, col: 14 },
-    { row: 11, col: 15 }, { row: 11, col: 16 }, { row: 11, col: 17 },
-    { row: 11, col: 18 }, { row: 11, col: 19 },
-    // Left wall
-    { row: 1, col: 0 }, { row: 2, col: 0 }, { row: 3, col: 0 },
-    { row: 4, col: 0 }, { row: 5, col: 0 }, { row: 6, col: 0 },
-    { row: 7, col: 0 }, { row: 8, col: 0 }, { row: 9, col: 0 },
-    { row: 10, col: 0 },
-    // Right wall
-    { row: 1, col: 19 }, { row: 2, col: 19 }, { row: 3, col: 19 },
-    { row: 4, col: 19 }, { row: 5, col: 19 }, { row: 6, col: 19 },
-    { row: 7, col: 19 }, { row: 8, col: 19 }, { row: 9, col: 19 },
-    { row: 10, col: 19 },
+    // Border walls
+    ...Array.from({ length: 24 }, (_, i) => ({ row: 0, col: i })),
+    ...Array.from({ length: 24 }, (_, i) => ({ row: 13, col: i })),
+    ...Array.from({ length: 12 }, (_, i) => ({ row: i + 1, col: 0 })),
+    ...Array.from({ length: 12 }, (_, i) => ({ row: i + 1, col: 23 })),
   ],
   decorations: [
-    { row: 4, col: 9, type: 'plant' },
-    { row: 4, col: 10, type: 'plant' },
-    { row: 8, col: 9, type: 'watercooler' },
-    { row: 8, col: 10, type: 'printer' },
+    // Plants
+    { row: 2, col: 2, type: 'plant' },
+    { row: 2, col: 22, type: 'plant' },
+    { row: 11, col: 2, type: 'plant' },
+    { row: 11, col: 22, type: 'plant' },
+    // Water cooler
+    { row: 6, col: 2, type: 'watercooler' },
+    // Printer area
+    { row: 6, col: 21, type: 'printer' },
   ],
 };
 

@@ -7,22 +7,10 @@ interface AgentListProps {
   onClose: (agentId: string) => void;
 }
 
-const statusIcons = {
-  active: '⚡',
-  waiting: '⏳',
-  idle: '😴',
-};
-
 const statusColors = {
   active: '#00ff88',
   waiting: '#ffd93d',
   idle: '#6c757d',
-};
-
-const activityIcons: Record<string, string> = {
-  tool: '🔧',
-  status: '📊',
-  message: '💬',
 };
 
 function formatTime(timestamp: number): string {
@@ -53,7 +41,7 @@ export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentLis
             >
               <div className="agent-header">
                 <span className="agent-type">
-                  {agent.isSubagent ? '🔀' : '🤖'}
+                  {agent.isSubagent ? '[Sub]' : '[Main]'}
                 </span>
                 <span className="agent-name" title={agent.id}>
                   {agent.label || agent.id.slice(0, 16)}
@@ -62,18 +50,18 @@ export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentLis
                   className="agent-status"
                   style={{ color: statusColors[agent.status] }}
                 >
-                  {statusIcons[agent.status]}
+                  ●
                 </span>
               </div>
               <div className="agent-details">
                 {agent.channel && (
-                  <span className="agent-channel">📡 {agent.channel}</span>
+                  <span className="agent-channel">{agent.channel}</span>
                 )}
                 {agent.context && (
-                  <span className="agent-context">📍 {agent.context}</span>
+                  <span className="agent-context">{agent.context}</span>
                 )}
                 {agent.currentTool && (
-                  <span className="agent-tool">🔧 {agent.currentTool}</span>
+                  <span className="agent-tool">{agent.currentTool}</span>
                 )}
               </div>
               {selectedAgent === agent.id && (
@@ -84,7 +72,7 @@ export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentLis
                     onClose(agent.id);
                   }}
                 >
-                  ✕ Close
+                  Close
                 </button>
               )}
             </div>
@@ -99,7 +87,6 @@ export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentLis
               <div className="activity-list">
                 {selectedAgentData.recentActivities.map((activity, index) => (
                   <div key={index} className="activity-item">
-                    <span className="activity-icon">{activityIcons[activity.type] || '•'}</span>
                     <span className="activity-time">{formatTime(activity.timestamp)}</span>
                     <span className="activity-desc">{activity.description}</span>
                   </div>
