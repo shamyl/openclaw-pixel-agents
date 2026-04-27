@@ -1,14 +1,11 @@
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import * as fs from 'fs';
+import * as readline from 'readline';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const execAsync = promisify(exec);
+const __dirname = path.dirname(process.argv[1]);
 
 // Types
 interface AgentState {
@@ -23,6 +20,15 @@ interface AgentState {
   lastActivity: number;
   isSubagent: boolean;
   parentSessionKey?: string;
+  trajectoryFile?: string;
+  filePosition: number;
+  isWatching: boolean;
+}
+
+interface ToolEvent {
+  toolName: string;
+  status: 'start' | 'done';
+  timestamp: number;
 }
 
 interface ClientMessage {
@@ -33,23 +39,186 @@ interface ClientMessage {
 // State
 const agents = new Map<string, AgentState>();
 const clients = new Set<WebSocket>();
+const fileWatchers = new Map<string, fs.FSWatcher>();
 let pollInterval: NodeJS.Timeout | null = null;
 
 // OpenClaw paths
-const OPENCLAW_AGENTS_DIR = path.join(process.env.HOME || '/home/shamyl', '.openclaw', 'agents');
+const HOME = process.env.HOME || '/home/shamyl';
+const OPENCLAW_AGENTS_DIR = path.join(HOME, '.openclaw', 'agents');
 
-// Read OpenClaw sessions directly from filesystem
+// Broadcast to all connected clients
+function broadcast(message: Record<string, unknown>): void {
+  const data = JSON.stringify(message);
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(data);
+    }
+  }
+}
+
+// Parse trajectory file for tool events
+async function parseTrajectoryFile(filePath: string, agent: AgentState): Promise<void> {
+  try {
+    const stats = fs.statSync(filePath);
+    const currentSize = stats.size;
+    
+    if (agent.filePosition >= currentSize) {
+      return; // No new data
+    }
+
+    const stream = fs.createReadStream(filePath, {
+      start: agent.filePosition,
+      encoding: 'utf-8'
+    });
+
+    const rl = readline.createInterface({ input: stream });
+
+    for await (const line of rl) {
+      if (!line.trim()) continue;
+      
+      try {
+        const record = JSON.parse(line);
+        
+        // Look for tool calls in trajectory data
+        // OpenClaw trajectory format has tool info nested in data
+        if (record.type === 'tool_call' || 
+            (record.data && record.data.tool) ||
+            (record.source === 'tool' && record.data)) {
+          
+          const toolName = record.data?.tool || record.tool || 'Unknown';
+          const toolInput = record.data?.input || record.input || {};
+          
+          // Update agent with tool activity
+          agent.currentTool = toolName;
+          agent.toolStatus = formatToolStatus(toolName, toolInput);
+          agent.status = 'active';
+          agent.lastActivity = Date.now();
+
+          broadcast({
+            type: 'agentToolStart',
+            id: agent.id,
+            toolId: `${toolName}-${Date.now()}`,
+            status: agent.toolStatus,
+            toolName: toolName,
+          });
+
+          // Simulate tool completion after a delay
+          setTimeout(() => {
+            if (agent.currentTool === toolName) {
+              agent.currentTool = undefined;
+              agent.toolStatus = undefined;
+              agent.status = 'waiting';
+              
+              broadcast({
+                type: 'agentToolDone',
+                id: agent.id,
+                toolId: `${toolName}-${Date.now()}`,
+              });
+              
+              broadcast({
+                type: 'agentStatus',
+                id: agent.id,
+                status: 'waiting',
+              });
+            }
+          }, 2000 + Math.random() * 3000);
+        }
+      } catch (e) {
+        // Skip malformed lines
+      }
+    }
+
+    agent.filePosition = currentSize;
+  } catch (error) {
+    console.error(`[Bridge] Error parsing trajectory ${filePath}:`, error);
+  }
+}
+
+// Format tool status similar to Pixel Agents
+function formatToolStatus(toolName: string, input: Record<string, unknown>): string {
+  const base = (p: unknown) => (typeof p === 'string' ? path.basename(p) : '');
+  
+  switch (toolName) {
+    case 'read':
+    case 'Read':
+      return `Reading ${base(input.file_path || input.path)}`;
+    case 'edit':
+    case 'Edit':
+      return `Editing ${base(input.file_path || input.path)}`;
+    case 'write':
+    case 'Write':
+      return `Writing ${base(input.file_path || input.path)}`;
+    case 'bash':
+    case 'Bash':
+    case 'exec':
+    case 'Exec': {
+      const cmd = (input.command as string) || '';
+      return cmd.length > 40 ? `Running: ${cmd.slice(0, 40)}...` : `Running: ${cmd}`;
+    }
+    case 'glob':
+    case 'Glob':
+      return 'Searching files';
+    case 'grep':
+    case 'Grep':
+      return 'Searching code';
+    case 'web_fetch':
+    case 'WebFetch':
+      return 'Fetching web content';
+    case 'web_search':
+    case 'WebSearch':
+      return 'Searching the web';
+    case 'task':
+    case 'Task':
+    case 'agent':
+    case 'Agent': {
+      const desc = typeof input.description === 'string' ? input.description : '';
+      return desc ? `Subtask: ${desc.slice(0, 40)}${desc.length > 40 ? '...' : ''}` : 'Running subtask';
+    }
+    default:
+      return `Using ${toolName}`;
+  }
+}
+
+// Watch trajectory file for real-time updates
+function watchTrajectoryFile(agent: AgentState): void {
+  if (!agent.trajectoryFile || agent.isWatching) return;
+
+  const watcher = fs.watch(agent.trajectoryFile, (eventType) => {
+    if (eventType === 'change') {
+      parseTrajectoryFile(agent.trajectoryFile!, agent);
+    }
+  });
+
+  fileWatchers.set(agent.id, watcher);
+  agent.isWatching = true;
+  
+  // Initial parse
+  parseTrajectoryFile(agent.trajectoryFile, agent);
+}
+
+// Stop watching file
+function stopWatchingTrajectoryFile(agentId: string): void {
+  const watcher = fileWatchers.get(agentId);
+  if (watcher) {
+    watcher.close();
+    fileWatchers.delete(agentId);
+  }
+}
+
+// Read OpenClaw sessions from filesystem
 async function readOpenClawSessions(): Promise<Array<{
   sessionKey: string;
   label: string;
   agentId: string;
   isSubagent: boolean;
+  trajectoryFile?: string;
 }>> {
   const sessions: Array<{
     sessionKey: string;
     label: string;
     agentId: string;
     isSubagent: boolean;
+    trajectoryFile?: string;
   }> = [];
 
   try {
@@ -58,25 +227,22 @@ async function readOpenClawSessions(): Promise<Array<{
       return sessions;
     }
 
-    // Read agent directories
     const agentDirs = fs.readdirSync(OPENCLAW_AGENTS_DIR, { withFileTypes: true })
       .filter(d => d.isDirectory())
       .map(d => d.name);
-
-    console.log(`[Bridge] Found agents: ${agentDirs.join(', ')}`);
 
     for (const agentId of agentDirs) {
       const sessionsDir = path.join(OPENCLAW_AGENTS_DIR, agentId, 'sessions');
       if (!fs.existsSync(sessionsDir)) continue;
 
-      // Read session files
       const sessionFiles = fs.readdirSync(sessionsDir)
-        .filter(f => f.endsWith('.jsonl'));
+        .filter(f => f.endsWith('.jsonl') && !f.includes('.trajectory'));
 
       for (const sessionFile of sessionFiles) {
         const sessionPath = path.join(sessionsDir, sessionFile);
+        const trajectoryPath = sessionPath.replace('.jsonl', '.trajectory.jsonl');
+        
         try {
-          // Read first line to get session info
           const content = fs.readFileSync(sessionPath, 'utf-8');
           const lines = content.trim().split('\n').filter(l => l.trim());
           
@@ -89,7 +255,8 @@ async function readOpenClawSessions(): Promise<Array<{
               sessionKey,
               label: firstRecord.label || `${agentId} session`,
               agentId,
-              isSubagent: agentId !== 'main'
+              isSubagent: agentId !== 'main',
+              trajectoryFile: fs.existsSync(trajectoryPath) ? trajectoryPath : undefined
             });
           }
         } catch (e) {
@@ -104,29 +271,11 @@ async function readOpenClawSessions(): Promise<Array<{
   return sessions;
 }
 
-// Check for active sessions by looking at file modification times
-async function getActiveSessions(): Promise<Array<{
-  sessionKey: string;
-  label: string;
-  agentId: string;
-  isSubagent: boolean;
-  lastActivity: number;
-}>> {
-  const sessions = await readOpenClawSessions();
-  const now = Date.now();
-  
-  return sessions.map(s => ({
-    ...s,
-    lastActivity: now
-  }));
-}
-
 async function pollOpenClawAgents(): Promise<void> {
   try {
-    const activeSessions = await getActiveSessions();
+    const activeSessions = await readOpenClawSessions();
     const currentKeys = new Set<string>();
 
-    // Process sessions
     for (const session of activeSessions) {
       const key = session.sessionKey;
       currentKeys.add(key);
@@ -140,8 +289,24 @@ async function pollOpenClawAgents(): Promise<void> {
           status: 'idle',
           lastActivity: Date.now(),
           isSubagent: session.isSubagent,
+          trajectoryFile: session.trajectoryFile,
+          filePosition: 0,
+          isWatching: false,
         };
+        
+        // Get initial file position
+        if (session.trajectoryFile && fs.existsSync(session.trajectoryFile)) {
+          const stats = fs.statSync(session.trajectoryFile);
+          newAgent.filePosition = stats.size;
+        }
+        
         agents.set(key, newAgent);
+        
+        // Start watching trajectory file
+        if (session.trajectoryFile) {
+          watchTrajectoryFile(newAgent);
+        }
+        
         broadcast({
           type: 'agentCreated',
           id: key,
@@ -154,8 +319,9 @@ async function pollOpenClawAgents(): Promise<void> {
     }
 
     // Remove stale agents
-    for (const [key, _agent] of agents) {
+    for (const [key, agent] of agents) {
       if (!currentKeys.has(key)) {
+        stopWatchingTrajectoryFile(key);
         agents.delete(key);
         broadcast({
           type: 'agentClosed',
@@ -177,6 +343,8 @@ async function pollOpenClawAgents(): Promise<void> {
           status: 'active',
           lastActivity: Date.now(),
           isSubagent: false,
+          filePosition: 0,
+          isWatching: false,
         };
         agents.set(demoKey, demoAgent);
         broadcast({
@@ -191,43 +359,6 @@ async function pollOpenClawAgents(): Promise<void> {
     }
   } catch (error) {
     console.error('[Bridge] Error polling:', error);
-  }
-}
-
-function extractParentId(sessionKey: string): string | undefined {
-  const parts = sessionKey.split(':');
-  if (parts.length >= 2) {
-    return parts.slice(0, 2).join(':');
-  }
-  return undefined;
-}
-
-function broadcast(message: Record<string, unknown>): void {
-  const data = JSON.stringify(message);
-  for (const client of clients) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(data);
-    }
-  }
-}
-
-function _broadcastAgentStatuses(): void {
-  for (const [id, ag] of agents) {
-    broadcast({
-      type: 'agentStatus',
-      id,
-      status: ag.status,
-    });
-
-    if (ag.currentTool) {
-      broadcast({
-        type: 'agentToolStart',
-        id,
-        toolId: ag.currentTool,
-        status: ag.toolStatus || 'Working...',
-        toolName: ag.currentTool,
-      });
-    }
   }
 }
 
@@ -262,6 +393,17 @@ wss.on('connection', (ws) => {
       folderName: agent.agentId,
       isSubagent: agent.isSubagent,
     }));
+    
+    // Also send current status
+    if (agent.currentTool) {
+      ws.send(JSON.stringify({
+        type: 'agentToolStart',
+        id,
+        toolId: agent.currentTool,
+        status: agent.toolStatus,
+        toolName: agent.currentTool,
+      }));
+    }
   }
 
   ws.on('message', (data) => {
@@ -303,9 +445,12 @@ function handleClientMessage(_ws: WebSocket, msg: ClientMessage): void {
   }
 }
 
-// Simulate activity updates
+// Simulate activity for agents without trajectory files
 function simulateActivity(): void {
   for (const [id, agent] of agents) {
+    // Skip agents with real trajectory files
+    if (agent.trajectoryFile) continue;
+    
     if (Math.random() < 0.1) {
       const tools = ['Read', 'Write', 'Bash', 'WebSearch', 'Task'];
       const tool = tools[Math.floor(Math.random() * tools.length)];
@@ -347,6 +492,7 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3002;
 server.listen(PORT, () => {
   console.log(`🚀 OpenClaw Pixel UI Server running on port ${PORT}`);
   console.log(`📊 Web UI available at http://localhost:${PORT}`);
+  console.log(`🔍 Watching trajectory files in: ${OPENCLAW_AGENTS_DIR}`);
 
   // Initial poll
   pollOpenClawAgents();
@@ -354,7 +500,7 @@ server.listen(PORT, () => {
   // Start polling every 5 seconds
   pollInterval = setInterval(pollOpenClawAgents, 5000);
 
-  // Simulate activity for demo
+  // Simulate activity for demo agents
   setInterval(simulateActivity, 5000);
 });
 
@@ -362,6 +508,14 @@ server.listen(PORT, () => {
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
   if (pollInterval) clearInterval(pollInterval);
+  
+  // Close all file watchers
+  for (const [agentId, watcher] of fileWatchers) {
+    watcher.close();
+    console.log(`[Bridge] Stopped watching: ${agentId}`);
+  }
+  fileWatchers.clear();
+  
   server.close(() => {
     console.log('Server closed');
     process.exit(0);
