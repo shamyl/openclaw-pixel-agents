@@ -52,6 +52,13 @@ function App() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Sort agents by last activity (newest first) whenever agents change
+  const sortedAgents = [...agents].sort((a, b) => {
+    const aTime = a.lastActivity || 0;
+    const bTime = b.lastActivity || 0;
+    return bTime - aTime;
+  });
+
   const connectWebSocket = useCallback(() => {
     const ws = new WebSocket(`ws://${window.location.host}/ws`);
     wsRef.current = ws;
@@ -111,6 +118,7 @@ function App() {
           parentAgentId: msg.parentAgentId as string | undefined,
           channel: msg.channel as string | undefined,
           context: msg.context as string | undefined,
+          icon: msg.icon as string | undefined,
           status: 'idle',
           x: 0,
           y: 0,
@@ -197,7 +205,7 @@ function App() {
           />
         </div>
         <AgentList
-          agents={agents}
+          agents={sortedAgents}
           selectedAgent={selectedAgent}
           onSelect={handleAgentClick}
           onClose={handleCloseAgent}

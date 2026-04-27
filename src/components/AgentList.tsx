@@ -13,15 +13,26 @@ const statusColors = {
   idle: '#6c757d',
 };
 
-// Platform icons
+// Platform icons using SVG-like paths or emojis
 const iconMap: Record<string, string> = {
-  'discord': '💬',
-  'whatsapp': '📱',
-  'imessage': '💬',
-  'slack': '💬',
-  'telegram': '✈️',
-  'signal': '🔒',
-  'default': '🤖',
+  'discord': 'D',
+  'whatsapp': 'W',
+  'imessage': 'M',
+  'slack': 'S',
+  'telegram': 'T',
+  'signal': 'G',
+  'default': 'A',
+};
+
+// Icon colors
+const iconColors: Record<string, string> = {
+  'discord': '#7289da',
+  'whatsapp': '#25d366',
+  'imessage': '#34c759',
+  'slack': '#4a154b',
+  'telegram': '#0088cc',
+  'signal': '#3b45a3',
+  'default': '#95a5a6',
 };
 
 function formatTime(timestamp: number): string {
@@ -36,6 +47,18 @@ function formatTime(timestamp: number): string {
 
 export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentListProps) {
   const selectedAgentData = selectedAgent ? agents.find(a => a.id === selectedAgent) : null;
+
+  // Sort agents by last activity (newest first)
+  const sortedAgents = [...agents].sort((a, b) => {
+    // Get last activity timestamp
+    const aTime = a.recentActivities && a.recentActivities.length > 0 
+      ? a.recentActivities[0].timestamp 
+      : 0;
+    const bTime = b.recentActivities && b.recentActivities.length > 0 
+      ? b.recentActivities[0].timestamp 
+      : 0;
+    return bTime - aTime;
+  });
 
   return (
     <div className="agent-list">
@@ -59,17 +82,28 @@ export function AgentList({ agents, selectedAgent, onSelect, onClose }: AgentLis
       </div>
       
       <div className="agent-list-content">
-        {agents.length === 0 ? (
+        {sortedAgents.length === 0 ? (
           <div className="no-agents">No active agents</div>
         ) : (
-          agents.map((agent) => (
+          sortedAgents.map((agent) => (
             <div
               key={agent.id}
               className={`agent-item ${selectedAgent === agent.id ? 'selected' : ''}`}
               onClick={() => onSelect(agent.id)}
             >
               <div className="agent-header">
-                <span className="agent-icon">
+                <span 
+                  className="agent-icon"
+                  style={{ 
+                    backgroundColor: iconColors[agent.icon || 'default'],
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    fontSize: '10px',
+                    padding: '2px 5px',
+                    borderRadius: '3px',
+                    marginRight: '6px',
+                  }}
+                >
                   {iconMap[agent.icon || 'default']}
                 </span>
                 <span className="agent-name" title={agent.id}>
