@@ -176,29 +176,64 @@ export function OfficeCanvas({
       
       ctx.shadowBlur = 0;
       
-      // Status indicator (small dot)
+      // Status indicator ring (white border)
       const statusColor = AGENT_COLORS[agent.status];
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x + AGENT_SIZE/2 + 2, y - AGENT_SIZE/2 - 2, 5, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Status indicator dot
       ctx.fillStyle = statusColor;
       ctx.beginPath();
-      ctx.arc(x + AGENT_SIZE/2 - 2, y - AGENT_SIZE/2 - 2, 3, 0, Math.PI * 2);
+      ctx.arc(x + AGENT_SIZE/2 + 2, y - AGENT_SIZE/2 - 2, 4, 0, Math.PI * 2);
       ctx.fill();
       
-      // Activity indicator
+      // Activity indicator (bouncing dot above head when active)
       if (agent.status === 'active') {
-        const bounce = Math.sin(Date.now() / 150) * 2;
+        const bounce = Math.sin(Date.now() / 150) * 3;
         ctx.fillStyle = AGENT_COLORS.active;
-        ctx.fillRect(x - 2, y - AGENT_SIZE/2 - 12 + bounce, 4, 4);
+        ctx.beginPath();
+        ctx.arc(x, y - AGENT_SIZE/2 - 12 + bounce, 3, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Add "Working" text above
+        ctx.fillStyle = AGENT_COLORS.active;
+        ctx.font = 'bold 8px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('WORKING', x, y - AGENT_SIZE/2 - 18);
+      } else if (agent.status === 'waiting') {
+        // Show "Idle" text
+        ctx.fillStyle = AGENT_COLORS.waiting;
+        ctx.font = 'bold 8px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('IDLE', x, y - AGENT_SIZE/2 - 12);
       }
+      
+      // Status text below character
+      const statusText = agent.status.toUpperCase();
+      ctx.font = 'bold 7px monospace';
+      const textWidth = ctx.measureText(statusText).width;
+      
+      // Status text background
+      ctx.fillStyle = 'rgba(0,0,0,0.8)';
+      ctx.fillRect(x - textWidth/2 - 3, y + AGENT_SIZE/2 + 2, textWidth + 6, 10);
+      
+      // Status text
+      ctx.fillStyle = statusColor;
+      ctx.textAlign = 'center';
+      ctx.fillText(statusText, x, y + AGENT_SIZE/2 + 9);
       
       // Label background (for readability)
       const label = agent.context || agent.label?.slice(0, 12) || agent.id.slice(0, 8);
       ctx.font = 'bold 9px monospace';
-      const textWidth = ctx.measureText(label).width;
+      const labelWidth = ctx.measureText(label).width;
       
       // Draw label below agent with background
-      const labelY = y + AGENT_SIZE/2 + 14;
+      const labelY = y + AGENT_SIZE/2 + 22;
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(x - textWidth/2 - 4, labelY - 8, textWidth + 8, 14);
+      ctx.fillRect(x - labelWidth/2 - 4, labelY - 8, labelWidth + 8, 14);
       
       ctx.fillStyle = isSelected ? '#e94560' : '#fff';
       ctx.textAlign = 'center';
@@ -209,11 +244,11 @@ export function OfficeCanvas({
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
         const toolText = agent.currentTool.slice(0, 15);
         const toolWidth = ctx.measureText(toolText).width;
-        ctx.fillRect(x - toolWidth/2 - 2, y - AGENT_SIZE/2 - 22, toolWidth + 4, 12);
+        ctx.fillRect(x - toolWidth/2 - 2, y - AGENT_SIZE/2 - 32, toolWidth + 4, 12);
         
         ctx.fillStyle = '#ffd93d';
         ctx.font = '8px monospace';
-        ctx.fillText(toolText, x, y - AGENT_SIZE/2 - 14);
+        ctx.fillText(toolText, x, y - AGENT_SIZE/2 - 24);
       }
     });
 
